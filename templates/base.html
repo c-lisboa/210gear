@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}Portal de Aviação{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <nav>
+    <a href="/">🏠 Início</a>
+    <a href="/busca">🔎 Busca ICAO/IATA</a>
+    <a href="/mapa">🗺️ Mapa ao vivo</a>
+  </nav>
+  <main>{% block conteudo %}{% endblock %}</main>
+</body>
+</html>

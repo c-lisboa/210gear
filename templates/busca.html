@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1>🔎 Buscar aeroporto</h1>
+<form method="get">
+  <input name="q" value="{{ termo }}" placeholder="Ex: SBGL, GIG, Galeão">
+  <button>Buscar</button>
+</form>
+{% if resultados %}
+<table>
+  <tr><th>ICAO</th><th>IATA</th><th>Nome</th><th>País</th></tr>
+  {% for a in resultados %}
+  <tr>
+    <td><a href="/aeroporto/{{ a.ident }}">{{ a.ident }}</a></td>
+    <td>{{ a.iata_code }}</td><td>{{ a.name }}</td><td>{{ a.iso_country }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% elif termo %}<p>Nada encontrado para "{{ termo }}".</p>{% endif %}
+{% endblock %}

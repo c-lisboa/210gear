@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1>{{ d.aero.name }} ({{ d.aero.ident }})</h1>
+
+<h2>📋 Dados gerais</h2>
+<ul>
+  <li>IATA: {{ d.aero.iata_code or "—" }} | ICAO: {{ d.aero.ident }}</li>
+  <li>Tipo: {{ d.aero.type }}</li>
+  <li>Elevação: {{ d.aero.elevation_ft }} ft</li>
+  <li>Coordenadas: {{ d.aero.latitude_deg }}, {{ d.aero.longitude_deg }}</li>
+</ul>
+
+<h2>🛬 Pistas</h2>
+<table>
+  <tr><th>Designação</th><th>Comprimento (ft)</th><th>Largura (ft)</th><th>Superfície</th></tr>
+  {% for p in d.pistas %}
+  <tr><td>{{ p.le_ident }}/{{ p.he_ident }}</td><td>{{ p.length_ft }}</td>
+      <td>{{ p.width_ft }}</td><td>{{ p.surface }}</td></tr>
+  {% endfor %}
+</table>
+
+<h2>📻 Frequências</h2>
+<table>
+  <tr><th>Tipo</th><th>Descrição</th><th>MHz</th></tr>
+  {% for f in d.freqs %}
+  <tr><td>{{ f.type }}</td><td>{{ f.description }}</td><td>{{ f.frequency_mhz }}</td></tr>
+  {% endfor %}
+</table>
+
+{% if resumo %}
+<div class="badge-resumo" style="background:{{ resumo.cor }}">
+  <span class="badge-icone">{{ resumo.icone }}</span> {{ resumo.texto }}
+</div>
+{% endif %}
+
+
+<h2>🌤️ Meteorologia</h2>
+
+<div class="abas">
+  <button class="aba-btn ativa" onclick="abrirAba(event,'metar')">🌦️ METAR (atual)</button>
+  <button class="aba-btn" onclick="abrirAba(event,'taf')">📈 TAF (previsão)</button>
+</div>
+
+<!-- ABA METAR -->
+<div id="metar" class="aba-conteudo ativa">
+  {% if metar %}
+    {% if resumo %}
+    <div class="badge-resumo" style="background:{{ resumo.cor }}">
+      <span class="badge-icone">{{ resumo.icone }}</span> {{ resumo.texto }}
+    </div>
+    {% endif %}
+    <p><code>{{ metar.rawOb }}</code></p>
+    <ul class="metar">
+      {% for l in decodificado %}
+        <li style="border-left:5px solid {{ l.cor }}; color:{{ l.cor }}">
+          <span class="icone">{{ l.icone }}</span> {{ l.texto }}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}<p>Sem METAR disponível.</p>{% endif %}
+</div>
+
+<!-- ABA TAF -->
+<div id="taf" class="aba-conteudo">
+  {% if taf %}
+    {% if taf_resumo %}
+    <div class="badge-resumo" style="background:{{ taf_resumo.cor }}">
+      <span class="badge-icone">{{ taf_resumo.icone }}</span>
+      PREVISÃO: {{ taf_resumo.texto }}
+    </div>
+    {% endif %}
+    <p><code>{{ taf.rawTAF }}</code></p>
+    {% for bloco in taf_blocos %}
+    <div class="taf-bloco" style="border-left:5px solid {{ bloco.cor }}">
+      <h4 style="color:{{ bloco.cor }}">
+        {{ bloco.icone }} {{ bloco.titulo }}
+        {% if bloco.periodo %}<small>({{ bloco.periodo }})</small>{% endif %}
+      </h4>
+      <ul class="metar">
+        {% for l in bloco.itens %}
+          <li style="border-left:5px solid {{ l.cor }}; color:{{ l.cor }}">
+            <span class="icone">{{ l.icone }}</span> {{ l.texto }}
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+  {% else %}<p>Sem TAF disponível.</p>{% endif %}
+</div>
+
+<script>
+function abrirAba(ev, id) {
+  document.querySelectorAll('.aba-conteudo').forEach(e => e.classList.remove('ativa'));
+  document.querySelectorAll('.aba-btn').forEach(b => b.classList.remove('ativa'));
+  document.getElementById(id).classList.add('ativa');
+  ev.currentTarget.classList.add('ativa');
+}
+</script>
+
+
+
+<h2>🗺️ Localização</h2>
+<div id="mapa" style="height:300px"></div>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+  var m = L.map('mapa').setView([{{ d.aero.latitude_deg }}, {{ d.aero.longitude_deg }}], 13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(m);
+  L.marker([{{ d.aero.latitude_deg }}, {{ d.aero.longitude_deg }}])
+   .addTo(m).bindPopup("{{ d.aero.name }}").openPopup();
+</script>
+{% endblock %}

@@ -1,0 +1,94 @@
+body { font-family: Arial, sans-serif; margin: 0; background:#f4f6f9; color:#123; }
+nav { background:#123; padding:14px; }
+nav a { color:#fff; margin-right:20px; text-decoration:none; font-weight:bold; }
+main { padding:30px; max-width:1000px; margin:auto; }
+h1 { color:#1a3a5a; }
+table { border-collapse:collapse; width:100%; background:#fff; margin-bottom:20px; }
+th, td { border:1px solid #ddd; padding:8px; text-align:left; }
+th { background:#1a3a5a; color:#fff; }
+input, button { padding:8px; font-size:15px; }
+button { background:#1a3a5a; color:#fff; border:none; cursor:pointer; }
+code { background:#eee; padding:4px; display:inline-block; }
+
+ul.metar { list-style:none; padding:0; }
+ul.metar li {
+  background:#fff; margin-bottom:8px; padding:10px 14px;
+  border-radius:6px; font-weight:bold;
+  box-shadow:0 1px 3px rgba(0,0,0,.1);
+}
+ul.metar li .icone { font-size:1.3em; margin-right:8px; }
+
+.badge-resumo {
+  color:#fff; font-weight:bold; font-size:1.2em;
+  padding:14px 20px; border-radius:8px; margin:20px 0;
+  display:flex; align-items:center; gap:10px;
+  box-shadow:0 2px 6px rgba(0,0,0,.2);
+  letter-spacing:.5px;
+}
+.badge-resumo .badge-icone { font-size:1.5em; }
+
+.taf-bloco {
+  background:#fafbfc; padding:12px 18px; margin-bottom:16px;
+  border-radius:6px; box-shadow:0 1px 3px rgba(0,0,0,.08);
+}
+.taf-bloco h4 { margin:0 0 10px; }
+.taf-bloco h4 small { color:#7f8c8d; font-weight:normal; }
+
+.abas { display:flex; gap:4px; margin-bottom:0; }
+.aba-btn {
+  background:#dfe6ee; color:#34495e; border:none;
+  padding:12px 22px; font-size:15px; font-weight:bold;
+  cursor:pointer; border-radius:8px 8px 0 0; transition:.2s;
+}
+.aba-btn:hover { background:#c8d4df; }
+.aba-btn.ativa { background:#1a3a5a; color:#fff; }
+
+.aba-conteudo {
+  display:none;
+  background:#fff; padding:20px;
+  border-radius:0 8px 8px 8px;
+  box-shadow:0 2px 6px rgba(0,0,0,.1);
+}
+.aba-conteudo.ativa { display:block; }
+
+.radar-body { margin:0; background:#0a0f1a; color:#e0e6ed; font-family:sans-serif; }
+
+.radar-topo {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:14px 22px; background:#0d1a2b; border-bottom:2px solid #00ff88;
+}
+.radar-topo h1 { font-size:1.3em; margin:0; color:#00ff88; }
+.radar-contador { font-size:.95em; color:#8fa8c0; }
+
+/* mapa { width:100%; height:calc(100vh - 110px); } */
+#map { flex: 1; height: 100%; background: #04120a; position: relative; }
+
+
+.radar-legenda {
+  display:flex; gap:20px; justify-content:center;
+  padding:10px; background:#0d1a2b; font-size:.9em;
+}
+
+.aviao-icon div {
+  font-size:22px; text-align:center; line-height:26px;
+  filter:drop-shadow(0 0 3px currentColor);
+  transition:transform .5s linear;
+}
+
+/* efeito "brilho" nos círculos de alcance */
+.leaflet-container { background:#0a0f1a; }
+
+
+#wrap { flex: 1; display: flex; overflow: hidden; position: relative; }
+
+#radar-sweep {
+  position: absolute;
+  top: 50%;
+  left: calc(50% - 150px);   /* desloca p/ centro do MAPA (painel tem 300px) */
+  width: 150vh; height: 150vh;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 500;
+  border-radius: 50%;
+  overflow: hidden;
+}

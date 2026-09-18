@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1>✈️ Aeroportos do Rio de Janeiro</h1>
+<table>
+  <tr><th>ICAO</th><th>IATA</th><th>Nome</th><th>Tipo</th><th>Elevação (ft)</th></tr>
+  {% for a in rj %}
+  <tr>
+    <td><a href="/aeroporto/{{ a.ident }}">{{ a.ident }}</a></td>
+    <td>{{ a.iata_code }}</td>
+    <td>{{ a.name }}</td>
+    <td>{{ a.type }}</td>
+    <td>{{ a.elevation_ft }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

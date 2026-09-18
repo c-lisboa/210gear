@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Radar de Aviação - RJ</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; display: flex; flex-direction: column;
+           height: 100vh; overflow: hidden; background: #05140a; }
+
+    nav {
+      background: #0a1f12; padding: 10px 15px; display: flex; gap: 20px;
+      border-bottom: 1px solid #1f5c33;
+    }
+    nav a {
+      color: #4dff88; text-decoration: none; font-size: 14px; font-weight: bold;
+    }
+    nav a:hover { color: #fff; text-shadow: 0 0 6px #4dff88; }
+
+    #wrap { flex: 1; display: flex; overflow: hidden; }
+    #map { flex: 1; height: 100%; background: #04120a; }
+
+    .leaflet-tile { filter: grayscale(1) invert(1) brightness(0.6)
+                            sepia(1) hue-rotate(70deg) saturate(3); }
+
+    #painel {
+      width: 300px; background: #0a1f12; color: #b6ffcf;
+      display: flex; flex-direction: column; height: 100%;
+      border-left: 1px solid #1f5c33;
+    }
+    #painel header {
+      padding: 12px 15px; background: #0d2b18; font-size: 16px; font-weight: bold;
+      color: #4dff88;
+    }
+    #status { font-size: 12px; opacity: 0.8; margin-top: 4px; font-weight: normal; }
+
+    #area { padding: 10px 15px; background: #08180e; font-size: 11px; }
+    #area h4 { color: #4dff88; margin-bottom: 6px; }
+    .linha { display: flex; gap: 6px; margin-bottom: 6px; }
+    .linha input {
+      width: 50%; padding: 5px; background: #0d2b18; border: 1px solid #1f5c33;
+      color: #b6ffcf; border-radius: 4px; font-size: 11px;
+    }
+    #area button {
+      width: 100%; padding: 7px; border: none; border-radius: 5px;
+      background: #1f5c33; color: #fff; cursor: pointer; font-weight: bold;
+    }
+    #area button:hover { background: #2e8b4f; }
+
+    /* 🆕 botão liga/desliga rastro */
+    #opcoes { padding: 0 15px 10px; font-size: 11px; }
+    #opcoes label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+
+    #filtros { padding: 10px 15px; display: flex; gap: 8px; }
+    #filtros button {
+      flex: 1; padding: 8px; border: none; border-radius: 6px;
+      background: #0d2b18; color: #b6ffcf; cursor: pointer; font-size: 12px;
+    }
+    #filtros button.ativo { background: #1f5c33; color: #fff; }
+
+    #lista { flex: 1; overflow-y: auto; padding: 5px; }
+    .item {
+      background: #0d2b18; margin: 5px; padding: 10px; border-radius: 8px;
+      cursor: pointer; border-left: 4px solid #4dff88; transition: background 0.2s;
+    }
+    .item:hover { background: #133d22; }
+    .item .call { font-weight: bold; font-size: 14px; color: #fff; }
+    .item .info { font-size: 11px; opacity: 0.8; margin-top: 3px; }
+
+    #radar-sweep {
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 150vh; height: 150vh;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 400;
+      border-radius: 50%;
+      overflow: hidden;
+    }
+    #radar-sweep::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      border-radius: 50%;
+      background: conic-gradient(
+        from 0deg,
+        rgba(77, 255, 136, 0.35) 0deg,
+        rgba(77, 255, 136, 0.08) 25deg,
+        transparent 60deg,
+        transparent 360deg
+      );
+      animation: girar 4s linear infinite;
+    }
+    #radar-sweep::after {
+      content: "";
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 100%; height: 100%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      pointer-events: none;
+      background:
+        radial-gradient(circle, transparent 0%, transparent 24%, rgba(77,255,136,0.15) 25%, transparent 26%),
+        radial-gradient(circle, transparent 0%, transparent 49%, rgba(77,255,136,0.15) 50%, transparent 51%),
+        radial-gradient(circle, transparent 0%, transparent 74%, rgba(77,255,136,0.15) 75%, transparent 76%);
+      border: 1px solid rgba(77,255,136,0.1);
+    }
+    @keyframes girar {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/">🏠 Início</a>
+    <a href="/busca">🔎 Busca ICAO/IATA</a>
+    <a href="/mapa">🗺️ Mapa ao vivo</a>
+  </nav>
+
+  <div id="wrap">
+    <div id="map"></div>
+    <div id="radar-sweep"></div>
+
+    <div id="painel">
+      <header>
+        ✈️ Radar RJ
+        <div id="status">Carregando...</div>
+      </header>
+
+      <div id="area">
+        <h4>📍 Área do radar</h4>
+        <div class="linha">
+          <input id="lamin" value="-23.2" placeholder="lat min">
+          <input id="lamax" value="-22.4" placeholder="lat max">
+        </div>
+        <div class="linha">
+          <input id="lomin" value="-44.0" placeholder="lon min">
+          <input id="lomax" value="-42.9" placeholder="lon max">
+        </div>
+        <button onclick="aplicarArea()">🔄 Aplicar área</button>
+      </div>
+
+      <!-- 🆕 liga/desliga o rastro -->
+      <div id="opcoes">
+        <label>
+          <input type="checkbox" id="chkRastro" checked>
+          📡 Mostrar rastro dos aviões
+        </label>
+      </div>
+
+      <div id="filtros">
+        <button data-f="todos" class="ativo">Todos</button>
+        <button data-f="voo">Em voo</button>
+        <button data-f="solo">No solo</button>
+      </div>
+      <div id="lista"></div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([-22.8, -43.4], 9);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    let marcadores = {}, filtroAtual = "todos", dadosAtuais = [];
+    let retanguloArea = null;
+
+    const detalhesAviao = {};
+
+    // 🆕 histórico de posições e linhas de rastro por avião
+    const historico = {};     // icao → [[lat,lon], ...]
+    const trilhas = {};       // icao → L.polyline
+    const MAX_PONTOS = 15;    // quantas posições guardar por avião
+    let mostrarRastro = true;
+
+    function corPorAltitude(alt, solo) {
+      if (solo) return "#9e9e9e";
+      if (alt < 1500) return "#ff5252";
+      if (alt < 4000) return "#ffab40";
+      if (alt < 8000) return "#ffff00";
+      return "#40c4ff";
+    }
+
+    function iconeAviao(rumo, cor) {
+      return L.divIcon({
+        className: '',
+        html: `<div style="transform: rotate(${rumo}deg); font-size:22px;
+                 color:${cor}; text-shadow:0 0 6px ${cor};">✈️</div>`,
+        iconSize: [24, 24], iconAnchor: [12, 12]
+      });
+    }
+
+    function moverSuave(marcador, destLat, destLon) {
+      const inicio = marcador.getLatLng();
+      const passos = 60, duracao = 2000;
+      let passo = 0;
+      const dLat = (destLat - inicio.lat) / passos;
+      const dLon = (destLon - inicio.lng) / passos;
+      const timer = setInterval(() => {
+        passo++;
+        marcador.setLatLng([inicio.lat + dLat*passo, inicio.lng + dLon*passo]);
+        if (passo >= passos) clearInterval(timer);
+      }, duracao / passos);
+    }
+
+    function passaFiltro(a) {
+      if (filtroAtual === "voo") return !a.solo;
+      if (filtroAtual === "solo") return a.solo;
+      return true;
+    }
+
+    // 🆕 registra a posição e redesenha a trilha do avião
+    function atualizarRastro(a) {
+      if (!historico[a.icao]) historico[a.icao] = [];
+      const pontos = historico[a.icao];
+
+      // só adiciona se realmente mudou de lugar (evita pontos repetidos)
+      const ultimo = pontos[pontos.length - 1];
+      if (!ultimo || ultimo[0] !== a.lat || ultimo[1] !== a.lon) {
+        pontos.push([a.lat, a.lon]);
+        if (pontos.length > MAX_PONTOS) pontos.shift();
+      }
+
+      // remove trilha antiga
+      if (trilhas[a.icao]) { map.removeLayer(trilhas[a.icao]); delete trilhas[a.icao]; }
+
+      // desenha nova trilha (só se ligado e com 2+ pontos)
+      if (mostrarRastro && pontos.length >= 2) {
+        trilhas[a.icao] = L.polyline(pontos, {
+          color: corPorAltitude(a.alt, a.solo),
+          weight: 2, opacity: 0.6, dashArray: "4,4"
+        }).addTo(map);
+      }
+    }
+
+    function atualizarLista(avioes) {
+      const lista = document.getElementById('lista');
+      lista.innerHTML = "";
+      avioes.forEach(a => {
+        const div = document.createElement('div');
+        div.className = 'item';
+        div.style.borderLeftColor = corPorAltitude(a.alt, a.solo);
+        div.innerHTML = `
+          <div class="call">${a.bandeira} ${a.callsign}</div>
+          <div class="info">
+            Alt: ${Math.round(a.alt)}m • Vel: ${Math.round(a.veloc)}m/s
+            • ${a.solo ? "No solo" : "Em voo"}
+          </div>`;
+        div.onclick = () => {
+          map.setView([a.lat, a.lon], 11);
+          if (marcadores[a.icao]) marcadores[a.icao].openPopup();
+        };
+        lista.appendChild(div);
+      });
+    }
+
+    function urlComArea() {
+      const p = new URLSearchParams({
+        lamin: document.getElementById('lamin').value,
+        lamax: document.getElementById('lamax').value,
+        lomin: document.getElementById('lomin').value,
+        lomax: document.getElementById('lomax').value,
+      });
+      return '/api/trafego?' + p.toString();
+    }
+
+    function desenharArea() {
+      const b = [
+        [parseFloat(document.getElementById('lamin').value),
+         parseFloat(document.getElementById('lomin').value)],
+        [parseFloat(document.getElementById('lamax').value),
+         parseFloat(document.getElementById('lomax').value)]
+      ];
+      if (retanguloArea) map.removeLayer(retanguloArea);
+      retanguloArea = L.rectangle(b, {
+        color: "#4dff88", weight: 1, fill: false, dashArray: "5,5"
+      }).addTo(map);
+    }
+
+    function aplicarArea() {
+      Object.values(marcadores).forEach(m => map.removeLayer(m));
+      Object.values(trilhas).forEach(t => map.removeLayer(t));   // 🆕 limpa trilhas
+      marcadores = {};
+      for (const k in trilhas) delete trilhas[k];
+      for (const k in historico) delete historico[k];
+      desenharArea();
+      map.fitBounds(retanguloArea.getBounds());
+      carregarAvioes();
+    }
+
+    async function carregarAvioes() {
+      try {
+        const resp = await fetch(urlComArea());
+        dadosAtuais = await resp.json();
+        renderizar();
+        const hora = new Date().toLocaleTimeString('pt-BR');
+        document.getElementById('status').textContent =
+          `${dadosAtuais.length} aeronave(s) • ${hora}`;
+      } catch (e) {
+        document.getElementById('status').textContent = "Erro ao carregar";
+      }
+    }
+
+    function textoExtra(d) {
+      if (!d || (!d.modelo && !d.dono && !d.registro)) return "";
+      return `<hr style="margin:6px 0">
+        ${d.registro ? '🏷️ ' + d.registro + '<br>' : ''}
+        ${d.modelo ? '✈️ ' + d.modelo + '<br>' : ''}
+        ${d.fabricante ? '🏭 ' + d.fabricante + '<br>' : ''}
+        ${d.dono ? '🏢 ' + d.dono : ''}`;
+    }
+
+    function renderizar() {
+      const filtrados = dadosAtuais.filter(passaFiltro);
+      const ativos = new Set();
+
+      filtrados.forEach(a => {
+        ativos.add(a.icao);
+        const cor = corPorAltitude(a.alt, a.solo);
+
+        atualizarRastro(a);   // 🆕 registra posição e desenha trilha
+
+        const popup = `
+          <b>${a.bandeira} ${a.callsign}</b><br>
+          País: ${a.pais}<br>
+          Altitude: ${Math.round(a.alt)} m<br>
+          Velocidade: ${Math.round(a.veloc)} m/s<br>
+          Situação: ${a.solo ? "No solo" : "Em voo"}`;
+
+        const popupCompleto = popup + textoExtra(detalhesAviao[a.icao]);
+
+        if (marcadores[a.icao]) {
+          moverSuave(marcadores[a.icao], a.lat, a.lon);
+          marcadores[a.icao].setIcon(iconeAviao(a.rumo, cor));
+          marcadores[a.icao].setPopupContent(popupCompleto);
+          marcadores[a.icao]._popupBase = popup;
+        } else {
+          const marcador = L.marker([a.lat, a.lon],
+            { icon: iconeAviao(a.rumo, cor) }).addTo(map).bindPopup(popupCompleto);
+          marcador._popupBase = popup;
+
+          marcador.on('popupopen', async () => {
+            if (detalhesAviao[a.icao]) return;
+            try {
+              const r = await fetch('/api/aviao/' + a.icao);
+              const d = await r.json();
+              detalhesAviao[a.icao] = d;
+              const extra = textoExtra(d);
+              if (extra) marcador.setPopupContent(marcador._popupBase + extra);
+            } catch (e) {}
+          });
+
+          marcadores[a.icao] = marcador;
+        }
+      });
+
+      // remove aviões que sumiram (marcador + trilha + histórico)
+      Object.keys(marcadores).forEach(icao => {
+        if (!ativos.has(icao)) {
+          map.removeLayer(marcadores[icao]);
+          delete marcadores[icao];
+          if (trilhas[icao]) { map.removeLayer(trilhas[icao]); delete trilhas[icao]; }
+          delete historico[icao];
+        }
+      });
+
+      atualizarLista(filtrados);
+    }
+
+    document.querySelectorAll('#filtros button').forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll('#filtros button')
+          .forEach(b => b.classList.remove('ativo'));
+        btn.classList.add('ativo');
+        filtroAtual = btn.dataset.f;
+        renderizar();
+      };
+    });
+
+    // 🆕 liga/desliga o rastro
+    document.getElementById('chkRastro').addEventListener('change', (e) => {
+      mostrarRastro = e.target.checked;
+      if (!mostrarRastro) {
+        // desliga: remove todas as trilhas do mapa
+        Object.values(trilhas).forEach(t => map.removeLayer(t));
+        for (const k in trilhas) delete trilhas[k];
+      } else {
+        renderizar();   // liga: redesenha
+      }
+    });
+
+    desenharArea();
+    carregarAvioes();
+    setInterval(carregarAvioes, 100000);
+  </script>
+</body>
+</html>
