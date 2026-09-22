@@ -92,3 +92,39 @@ ul.metar li .icone { font-size:1.3em; margin-right:8px; }
   border-radius: 50%;
   overflow: hidden;
 }
+
+/* ═══════════════ RESPONSIVIDADE ═══════════════ */
+
+/* tabelas roláveis no celular (não estouram a tela) */
+table { display: block; overflow-x: auto; white-space: nowrap; }
+
+/* imagens e mapa nunca ultrapassam a tela */
+img, #mapa, .leaflet-container { max-width: 100%; }
+
+/* ===== TABLETS (até 768px) ===== */
+@media (max-width: 768px) {
+  main { padding: 18px; }
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.2rem; }
+
+  /* menu quebra em linhas se não couber */
+  nav { display: flex; flex-wrap: wrap; gap: 10px; }
+  nav a { margin-right: 0; }
+}
+
+/* ===== CELULARES (até 480px) ===== */
+@media (max-width: 480px) {
+  main { padding: 14px; }
+  body { font-size: 14px; }
+  h1 { font-size: 1.3rem; }
+
+  /* busca: campo e botão em coluna, largura total */
+  form { display: flex; flex-direction: column; gap: 8px; }
+  form input, form button { width: 100%; box-sizing: border-box; }
+
+  /* abas METAR/TAF viram largura total */
+  .abas { flex-wrap: wrap; }
+  .aba-btn { flex: 1; padding: 10px; font-size: 14px; }
+
+  th, td { padding: 6px; font-size: 13px; }
+}
