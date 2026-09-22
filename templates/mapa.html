@@ -2,6 +2,7 @@
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Radar de Aviação - RJ</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <style>
@@ -11,7 +12,7 @@
 
     nav {
       background: #0a1f12; padding: 10px 15px; display: flex; gap: 20px;
-      border-bottom: 1px solid #1f5c33;
+      border-bottom: 1px solid #1f5c33; flex-wrap: wrap;
     }
     nav a {
       color: #4dff88; text-decoration: none; font-size: 14px; font-weight: bold;
@@ -48,7 +49,6 @@
     }
     #area button:hover { background: #2e8b4f; }
 
-    /* 🆕 botão liga/desliga rastro */
     #opcoes { padding: 0 15px 10px; font-size: 11px; }
     #opcoes label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 
@@ -111,6 +111,19 @@
       from { transform: rotate(0deg); }
       to   { transform: rotate(360deg); }
     }
+
+    /* ═══ RESPONSIVIDADE DO RADAR ═══ */
+    @media (max-width: 768px) {
+      #wrap { flex-direction: column; }
+      #map { height: 55vh; flex: none; }
+      #painel {
+        width: 100%; height: 45vh;
+        border-left: none; border-top: 1px solid #1f5c33;
+      }
+      #radar-sweep { display: none; }
+      #area { font-size: 12px; }
+      .linha input { font-size: 12px; }
+    }
   </style>
 </head>
 <body>
@@ -143,7 +156,6 @@
         <button onclick="aplicarArea()">🔄 Aplicar área</button>
       </div>
 
-      <!-- 🆕 liga/desliga o rastro -->
       <div id="opcoes">
         <label>
           <input type="checkbox" id="chkRastro" checked>
@@ -171,11 +183,9 @@
     let retanguloArea = null;
 
     const detalhesAviao = {};
-
-    // 🆕 histórico de posições e linhas de rastro por avião
-    const historico = {};     // icao → [[lat,lon], ...]
-    const trilhas = {};       // icao → L.polyline
-    const MAX_PONTOS = 15;    // quantas posições guardar por avião
+    const historico = {};
+    const trilhas = {};
+    const MAX_PONTOS = 15;
     let mostrarRastro = true;
 
     function corPorAltitude(alt, solo) {
@@ -214,22 +224,15 @@
       return true;
     }
 
-    // 🆕 registra a posição e redesenha a trilha do avião
     function atualizarRastro(a) {
       if (!historico[a.icao]) historico[a.icao] = [];
       const pontos = historico[a.icao];
-
-      // só adiciona se realmente mudou de lugar (evita pontos repetidos)
       const ultimo = pontos[pontos.length - 1];
       if (!ultimo || ultimo[0] !== a.lat || ultimo[1] !== a.lon) {
         pontos.push([a.lat, a.lon]);
         if (pontos.length > MAX_PONTOS) pontos.shift();
       }
-
-      // remove trilha antiga
       if (trilhas[a.icao]) { map.removeLayer(trilhas[a.icao]); delete trilhas[a.icao]; }
-
-      // desenha nova trilha (só se ligado e com 2+ pontos)
       if (mostrarRastro && pontos.length >= 2) {
         trilhas[a.icao] = L.polyline(pontos, {
           color: corPorAltitude(a.alt, a.solo),
@@ -284,7 +287,7 @@
 
     function aplicarArea() {
       Object.values(marcadores).forEach(m => map.removeLayer(m));
-      Object.values(trilhas).forEach(t => map.removeLayer(t));   // 🆕 limpa trilhas
+      Object.values(trilhas).forEach(t => map.removeLayer(t));
       marcadores = {};
       for (const k in trilhas) delete trilhas[k];
       for (const k in historico) delete historico[k];
@@ -322,8 +325,7 @@
       filtrados.forEach(a => {
         ativos.add(a.icao);
         const cor = corPorAltitude(a.alt, a.solo);
-
-        atualizarRastro(a);   // 🆕 registra posição e desenha trilha
+        atualizarRastro(a);
 
         const popup = `
           <b>${a.bandeira} ${a.callsign}</b><br>
@@ -359,7 +361,6 @@
         }
       });
 
-      // remove aviões que sumiram (marcador + trilha + histórico)
       Object.keys(marcadores).forEach(icao => {
         if (!ativos.has(icao)) {
           map.removeLayer(marcadores[icao]);
@@ -382,17 +383,18 @@
       };
     });
 
-    // 🆕 liga/desliga o rastro
     document.getElementById('chkRastro').addEventListener('change', (e) => {
       mostrarRastro = e.target.checked;
       if (!mostrarRastro) {
-        // desliga: remove todas as trilhas do mapa
         Object.values(trilhas).forEach(t => map.removeLayer(t));
         for (const k in trilhas) delete trilhas[k];
       } else {
-        renderizar();   // liga: redesenha
+        renderizar();
       }
     });
+
+    // 🆕 corrige tamanho do mapa ao girar o celular / redimensionar
+    window.addEventListener('resize', () => map.invalidateSize());
 
     desenharArea();
     carregarAvioes();
