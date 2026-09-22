@@ -1,5 +1,6 @@
 import os
 import time
+import math
 import requests
 
 from flask import Flask, render_template, request, jsonify
@@ -49,9 +50,9 @@ def api_avioes():
     return jsonify(opensky.avioes_rj())
 
 # ─────────────────────────────────────────────
-# 🌎 Área padrão e bandeiras
+# 🌎 Centro padrão (Rio de Janeiro) e bandeiras
 # ─────────────────────────────────────────────
-BBOX_RJ = {"lamin": -25.0, "lomin": -48.0, "lamax": -20.0, "lomax": -40.0}
+CENTRO_PADRAO = {"lat": -22.8, "lon": -43.4, "raio": 80}  # raio em milhas náuticas
 
 PAISES_ISO = {
     "Brazil": "BR", "United States": "US", "Argentina": "AR",
@@ -71,18 +72,19 @@ def bandeira_emoji(pais):
 # 🚦 Cache de tráfego (protege contra excesso de requisições)
 # ─────────────────────────────────────────────
 CACHE_SEGUNDOS = 8
-_cache_trafego = {}  # chave = string do ponto → {"dados": [...], "hora": timestamp}
+_cache_trafego = {}  # chave = "lat,lon,raio" → {"dados": [...], "hora": timestamp}
 
 @app.route("/api/trafego")
 def api_trafego():
-    # centro da área (média do bbox) e raio de ~130 milhas náuticas
-    lat = (request.args.get("lamin", -23.2, type=float) +
-           request.args.get("lamax", -22.4, type=float)) / 2
-    lon = (request.args.get("lomin", -44.0, type=float) +
-           request.args.get("lomax", -42.9, type=float)) / 2
-    raio_nm = 130
+    # Agora recebemos DIRETO: centro (lat, lon) e raio em milhas náuticas
+    lat = request.args.get("lat", CENTRO_PADRAO["lat"], type=float)
+    lon = request.args.get("lon", CENTRO_PADRAO["lon"], type=float)
+    raio_nm = request.args.get("raio", CENTRO_PADRAO["raio"], type=float)
 
-    chave = f"{round(lat, 2)},{round(lon, 2)}"
+    # adsb.lol limita o raio a 250 nm
+    raio_nm = max(1, min(raio_nm, 250))
+
+    chave = f"{round(lat, 3)},{round(lon, 3)},{round(raio_nm)}"
     agora = time.time()
 
     # 1) Se tem cache recente, devolve sem bater na API
