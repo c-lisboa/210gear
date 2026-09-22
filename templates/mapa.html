@@ -14,12 +14,10 @@
       background: #0a1f12; padding: 10px 15px; display: flex; gap: 20px;
       border-bottom: 1px solid #1f5c33; flex-wrap: wrap;
     }
-    nav a {
-      color: #4dff88; text-decoration: none; font-size: 14px; font-weight: bold;
-    }
+    nav a { color: #4dff88; text-decoration: none; font-size: 14px; font-weight: bold; }
     nav a:hover { color: #fff; text-shadow: 0 0 6px #4dff88; }
 
-    #wrap { flex: 1; display: flex; overflow: hidden; }
+    #wrap { flex: 1; display: flex; overflow: hidden; position: relative; }
     #map { flex: 1; height: 100%; background: #04120a; }
 
     .leaflet-tile { filter: grayscale(1) invert(1) brightness(0.6)
@@ -38,13 +36,14 @@
 
     #area { padding: 10px 15px; background: #08180e; font-size: 11px; }
     #area h4 { color: #4dff88; margin-bottom: 6px; }
-    .linha { display: flex; gap: 6px; margin-bottom: 6px; }
-    .linha input {
-      width: 50%; padding: 5px; background: #0d2b18; border: 1px solid #1f5c33;
+    .campo { margin-bottom: 6px; }
+    .campo label { display: block; margin-bottom: 2px; opacity: 0.7; }
+    .campo input {
+      width: 100%; padding: 5px; background: #0d2b18; border: 1px solid #1f5c33;
       color: #b6ffcf; border-radius: 4px; font-size: 11px;
     }
     #area button {
-      width: 100%; padding: 7px; border: none; border-radius: 5px;
+      width: 100%; padding: 7px; border: none; border-radius: 5px; margin-top: 4px;
       background: #1f5c33; color: #fff; cursor: pointer; font-weight: bold;
     }
     #area button:hover { background: #2e8b4f; }
@@ -69,86 +68,38 @@
     .item .info { font-size: 11px; opacity: 0.8; margin-top: 3px; }
 
     #radar-sweep {
-      position: absolute;
-      top: 50%; left: 50%;
-      width: 150vh; height: 150vh;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
-      z-index: 400;
-      border-radius: 50%;
-      overflow: hidden;
+      position: absolute; top: 50%; left: 50%;
+      width: 150vh; height: 150vh; transform: translate(-50%, -50%);
+      pointer-events: none; z-index: 400; border-radius: 50%; overflow: hidden;
     }
     #radar-sweep::before {
-      content: "";
-      position: absolute;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      border-radius: 50%;
-      background: conic-gradient(
-        from 0deg,
-        rgba(77, 255, 136, 0.35) 0deg,
-        rgba(77, 255, 136, 0.08) 25deg,
-        transparent 60deg,
-        transparent 360deg
-      );
+      content: ""; position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%; border-radius: 50%;
+      background: conic-gradient(from 0deg,
+        rgba(77, 255, 136, 0.35) 0deg, rgba(77, 255, 136, 0.08) 25deg,
+        transparent 60deg, transparent 360deg);
       animation: girar 4s linear infinite;
     }
     #radar-sweep::after {
-      content: "";
-      position: absolute;
-      top: 50%; left: 50%;
-      width: 100%; height: 100%;
-      transform: translate(-50%, -50%);
-      border-radius: 50%;
-      pointer-events: none;
+      content: ""; position: absolute; top: 50%; left: 50%;
+      width: 100%; height: 100%; transform: translate(-50%, -50%);
+      border-radius: 50%; pointer-events: none;
       background:
-        radial-gradient(circle, transparent 0%, transparent 24%, rgba(77,255,136,0.15) 25%, transparent 26%),
-        radial-gradient(circle, transparent 0%, transparent 49%, rgba(77,255,136,0.15) 50%, transparent 51%),
-        radial-gradient(circle, transparent 0%, transparent 74%, rgba(77,255,136,0.15) 75%, transparent 76%);
+        radial-gradient(circle, transparent 24%, rgba(77,255,136,0.15) 25%, transparent 26%),
+        radial-gradient(circle, transparent 49%, rgba(77,255,136,0.15) 50%, transparent 51%),
+        radial-gradient(circle, transparent 74%, rgba(77,255,136,0.15) 75%, transparent 76%);
       border: 1px solid rgba(77,255,136,0.1);
     }
-    @keyframes girar {
-      from { transform: rotate(0deg); }
-      to   { transform: rotate(360deg); }
+    @keyframes girar { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+    @media (max-width: 768px) {
+      body { height: auto; min-height: 100vh; overflow: auto; }
+      #wrap { flex-direction: column; overflow: visible; height: auto; }
+      #map { height: 50vh; flex: none; }
+      #painel { width: 100%; height: auto; border-left: none; border-top: 1px solid #1f5c33; }
+      #lista { max-height: 45vh; }
+      #radar-sweep { display: block; width: 90vw; height: 90vw; top: 25vh; left: 50%; z-index: 400; }
     }
-
-/* ═══ RESPONSIVIDADE DO RADAR ═══ */
-@media (max-width: 768px) {
-  /* o body deixa de travar a altura; a página pode rolar */
-  body { height: auto; min-height: 100vh; overflow: auto; }
-
-  #wrap {
-    flex-direction: column;
-    overflow: visible;
-    height: auto;
-  }
-
-  #map {
-    height: 50vh;   /* meia tela pro mapa */
-    flex: none;
-  }
-
-  #painel {
-    width: 100%;
-    height: auto;   /* cresce conforme o conteúdo — nada corta */
-    border-left: none;
-    border-top: 1px solid #1f5c33;
-  }
-
-  /* a lista ganha altura própria pra rolar sozinha */
-  #lista { max-height: 45vh; }
-
-  /* ✅ radar reaparece: menor e centrado só sobre o mapa */
-  #radar-sweep {
-    display: block;
-    width: 90vw;
-    height: 90vw;
-    top: 25vh;      /* centro vertical da metade do mapa */
-    left: 50%;
-    z-index: 400;
-  }
-}
-
   </style>
 </head>
 <body>
@@ -169,16 +120,20 @@
       </header>
 
       <div id="area">
-        <h4>📍 Área do radar</h4>
-        <div class="linha">
-          <input id="lamin" value="-23.2" placeholder="lat min">
-          <input id="lamax" value="-22.4" placeholder="lat max">
+        <h4>📍 Centro e raio do radar</h4>
+        <div class="campo">
+          <label>Latitude</label>
+          <input id="lat" value="-22.8">
         </div>
-        <div class="linha">
-          <input id="lomin" value="-44.0" placeholder="lon min">
-          <input id="lomax" value="-42.9" placeholder="lon max">
+        <div class="campo">
+          <label>Longitude</label>
+          <input id="lon" value="-43.4">
         </div>
-        <button onclick="aplicarArea()">🔄 Aplicar área</button>
+        <div class="campo">
+          <label>Raio (milhas náuticas, máx. 250)</label>
+          <input id="raio" value="80">
+        </div>
+        <button onclick="aplicarArea()">🔄 Aplicar</button>
       </div>
 
       <div id="opcoes">
@@ -205,13 +160,15 @@
     }).addTo(map);
 
     let marcadores = {}, filtroAtual = "todos", dadosAtuais = [];
-    let retanguloArea = null;
+    let circuloArea = null;
 
     const detalhesAviao = {};
     const historico = {};
     const trilhas = {};
     const MAX_PONTOS = 15;
     let mostrarRastro = true;
+
+    const NM_PARA_METROS = 1852; // 1 milha náutica = 1852 m
 
     function corPorAltitude(alt, solo) {
       if (solo) return "#9e9e9e";
@@ -287,26 +244,27 @@
       });
     }
 
+    function lerCentro() {
+      return {
+        lat: parseFloat(document.getElementById('lat').value),
+        lon: parseFloat(document.getElementById('lon').value),
+        raio: Math.max(1, Math.min(parseFloat(document.getElementById('raio').value) || 80, 250))
+      };
+    }
+
     function urlComArea() {
-      const p = new URLSearchParams({
-        lamin: document.getElementById('lamin').value,
-        lamax: document.getElementById('lamax').value,
-        lomin: document.getElementById('lomin').value,
-        lomax: document.getElementById('lomax').value,
-      });
+      const c = lerCentro();
+      const p = new URLSearchParams({ lat: c.lat, lon: c.lon, raio: c.raio });
       return '/api/trafego?' + p.toString();
     }
 
     function desenharArea() {
-      const b = [
-        [parseFloat(document.getElementById('lamin').value),
-         parseFloat(document.getElementById('lomin').value)],
-        [parseFloat(document.getElementById('lamax').value),
-         parseFloat(document.getElementById('lomax').value)]
-      ];
-      if (retanguloArea) map.removeLayer(retanguloArea);
-      retanguloArea = L.rectangle(b, {
-        color: "#4dff88", weight: 1, fill: false, dashArray: "5,5"
+      const c = lerCentro();
+      if (circuloArea) map.removeLayer(circuloArea);
+      circuloArea = L.circle([c.lat, c.lon], {
+        radius: c.raio * NM_PARA_METROS,
+        color: "#4dff88", weight: 1.5, fill: true,
+        fillColor: "#4dff88", fillOpacity: 0.05, dashArray: "6,6"
       }).addTo(map);
     }
 
@@ -317,7 +275,7 @@
       for (const k in trilhas) delete trilhas[k];
       for (const k in historico) delete historico[k];
       desenharArea();
-      map.fitBounds(retanguloArea.getBounds());
+      map.fitBounds(circuloArea.getBounds());
       carregarAvioes();
     }
 
@@ -418,10 +376,10 @@
       }
     });
 
-    // 🆕 corrige tamanho do mapa ao girar o celular / redimensionar
     window.addEventListener('resize', () => map.invalidateSize());
 
     desenharArea();
+    map.fitBounds(circuloArea.getBounds());
     carregarAvioes();
     setInterval(carregarAvioes, 100000);
   </script>
