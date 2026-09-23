@@ -42,6 +42,10 @@ def aeroporto(ident):
 def mapa():
     return render_template("mapa.html")
 
+@app.route("/voo")
+def voo():
+    return render_template("voo.html")
+
 # ─────────────────────────────────────────────
 # ✈️ API de aviões (rota antiga, mantida)
 # ─────────────────────────────────────────────
@@ -163,6 +167,55 @@ def api_trafego():
     # 4) Salva no cache e devolve
     _cache_trafego[chave] = {"dados": avioes, "hora": agora}
     return jsonify(avioes)
+
+# ─────────────────────────────────────────────
+# 🔎 Busca de voo por callsign (adsb.lol global)
+# ─────────────────────────────────────────────
+@app.route("/api/voo/<callsign>")
+def api_voo(callsign):
+    cs = callsign.strip().upper().replace(" ", "")
+    if not cs:
+        return jsonify({"erro": "Informe um número de voo."})
+
+    try:
+        url = f"https://api.adsb.lol/v2/callsign/{cs}"
+        r = requests.get(url, timeout=(5, 10))
+        aeronaves = r.json().get("ac") or []
+    except Exception as e:
+        print("Erro adsb.lol callsign:", e)
+        return jsonify({"erro": "Falha ao consultar a API."})
+
+    if not aeronaves:
+        return jsonify({"erro": "Voo não encontrado no ar agora."})
+
+    # pega a primeira aeronave que tenha posição
+    a = next((x for x in aeronaves if x.get("lat") is not None), aeronaves[0])
+
+    registro = a.get("r", "") or ""
+    pais, bandeira = pais_por_registro(registro)
+    alt_baro = a.get("alt_baro")
+    no_solo = alt_baro == "ground"
+    alt = alt_baro if isinstance(alt_baro, (int, float)) else 0
+    squawk = a.get("squawk", "") or ""
+
+    return jsonify({
+        "icao": a.get("hex", ""),
+        "callsign": (a.get("flight") or cs).strip(),
+        "pais": pais,
+        "bandeira": bandeira,
+        "lat": a.get("lat"),
+        "lon": a.get("lon"),
+        "alt": alt,
+        "solo": no_solo,
+        "veloc": a.get("gs") or 0,
+        "rumo": a.get("track") or 0,
+        "registro": registro,
+        "tipo": a.get("t", "") or "",
+        "modelo": a.get("desc", "") or "",
+        "subindo": a.get("baro_rate") or 0,
+        "squawk": squawk,
+        "emergencia": squawk in ("7500", "7600", "7700"),
+    })
 
 # ─────────────────────────────────────────────
 # 🔍 Detalhes da aeronave (Hexdb.io — grátis, sem chave)
