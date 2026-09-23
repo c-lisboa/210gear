@@ -10,30 +10,40 @@ app = Flask(__name__)
 
 # ─────────────────────────────────────────────
 # 🌐 Fontes de dados ADS-B (todas usam o mesmo formato v2)
-# Tenta em ordem; a primeira que responder com aeronaves vence.
 # ─────────────────────────────────────────────
 FONTES_ADSB = [
-    "https://api.adsb.one",   # airplanes.live — melhor cobertura no Brasil
-    "https://api.adsb.lol",   # reserva
+    "https://api.adsb.lol",   # aberta, sem bloqueio — fonte principal
+    "https://api.adsb.one",   # airplanes.live — reserva (pode bloquear)
+    "https://opendata.adsb.fi",  # adsb.fi — mesmo formato v2, aberta
 ]
+
+# Cabeçalho: alguns serviços (adsb.one/Cloudflare) exigem User-Agent
+CABECALHOS_ADSB = {
+    "User-Agent": "Mozilla/5.0 (compatible; SiteAviacaoRJ/1.0)",
+    "Accept": "application/json",
+}
 
 def buscar_adsb(caminho):
     """
     Tenta cada fonte ADS-B até obter aeronaves.
     caminho ex: '/v2/point/-22.8/-43.4/80' ou '/v2/callsign/GLO1234'
-    Retorna a lista 'ac' (pode ser vazia) e a base que respondeu.
     """
     ultima_lista = []
     for base in FONTES_ADSB:
         try:
-            r = requests.get(base + caminho, timeout=(5, 10))
+            r = requests.get(base + caminho,
+                             headers=CABECALHOS_ADSB,
+                             timeout=(5, 10))
+            if not r.ok:
+                print(f"{base} respondeu {r.status_code}")
+                continue
             ac = r.json().get("ac") or []
             if ac:
-                return ac  # achou aviões nesta fonte → usa
+                return ac
             ultima_lista = ac
         except Exception as e:
             print(f"Erro em {base}{caminho}:", e)
-    return ultima_lista  # nenhuma trouxe aviões → devolve vazia
+    return ultima_lista
 
 # ─────────────────────────────────────────────
 # 🗺️ Rotas de páginas
