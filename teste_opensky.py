@@ -12,7 +12,7 @@ def diagnostico():
 
     # 1. IP de saída do Render
     try:
-        ip = requests.get("https://api.ipify.org?format=json", timeout=10)
+        ip = requests.get("https://api.ipify.org?format=json", timeout=5)
         diag["ip_saida_render"] = ip.json()
     except Exception as e:
         diag["ip_saida_render"] = f"ERRO: {e}"
@@ -25,14 +25,14 @@ def diagnostico():
 
     # 3. TESTE DE CONECTIVIDADE PURA (sem autenticar)
     try:
-        ping = requests.get("https://auth.opensky-network.org/", timeout=10)
+        ping = requests.get("https://auth.opensky-network.org/", timeout=5)
         diag["auth_host_alcancavel"] = f"OK - status {ping.status_code}"
     except Exception as e:
         diag["auth_host_alcancavel"] = f"BLOQUEADO: {e}"
 
     # 4. Teste de host neutro (controle) - google
     try:
-        g = requests.get("https://www.google.com", timeout=10)
+        g = requests.get("https://www.google.com", timeout=5)
         diag["google_alcancavel"] = f"OK - status {g.status_code}"
     except Exception as e:
         diag["google_alcancavel"] = f"BLOQUEADO: {e}"
@@ -48,7 +48,7 @@ def diagnostico():
                     "client_secret": client_secret,
                 },
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
-                timeout=15,
+                timeout=5,
             )
             diag["token_status"] = tr.status_code
             if tr.status_code == 200:
