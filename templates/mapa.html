@@ -18,7 +18,7 @@
     nav a:hover { color: #fff; text-shadow: 0 0 6px #4dff88; }
 
     #wrap { flex: 1; display: flex; overflow: hidden; position: relative; }
-    #map { flex: 1; height: 100%; background: #04120a; }
+    #map { flex: 1; height: 100%; background: #04120a; position: relative; }
 
     .leaflet-tile { filter: grayscale(1) invert(1) brightness(0.6)
                             sepia(1) hue-rotate(70deg) saturate(3); }
@@ -67,6 +67,7 @@
     .item .call { font-weight: bold; font-size: 14px; color: #fff; }
     .item .info { font-size: 11px; opacity: 0.8; margin-top: 3px; }
 
+    /* Radar girando — ancorado ao #map e recentrado no ponto geográfico */
     #radar-sweep {
       position: absolute; top: 50%; left: 50%;
       width: 150vh; height: 150vh; transform: translate(-50%, -50%);
@@ -98,7 +99,6 @@
       #map { height: 50vh; flex: none; }
       #painel { width: 100%; height: auto; border-left: none; border-top: 1px solid #1f5c33; }
       #lista { max-height: 45vh; }
-      #radar-sweep { display: block; width: 90vw; height: 90vw; top: 25vh; left: 50%; z-index: 400; }
     }
   </style>
 </head>
@@ -110,8 +110,9 @@
   </nav>
 
   <div id="wrap">
-    <div id="map"></div>
-    <div id="radar-sweep"></div>
+    <div id="map">
+      <div id="radar-sweep"></div>
+    </div>
 
     <div id="painel">
       <header>
@@ -233,7 +234,8 @@
         div.innerHTML = `
           <div class="call">${a.bandeira} ${a.callsign}</div>
           <div class="info">
-            Alt: ${Math.round(a.alt)}m • Vel: ${Math.round(a.veloc)}m/s
+            ${a.registro ? a.registro + " • " : ""}${a.tipo || ""}<br>
+            Alt: ${Math.round(a.alt)} ft • Vel: ${Math.round(a.veloc)} nós
             • ${a.solo ? "No solo" : "Em voo"}
           </div>`;
         div.onclick = () => {
@@ -268,6 +270,19 @@
       }).addTo(map);
     }
 
+    // 🆕 Recentra o sweep no centro geográfico do círculo (segue o mapa)
+    function centrarSweep() {
+      const c = lerCentro();
+      if (isNaN(c.lat) || isNaN(c.lon)) return;
+      const p = map.latLngToContainerPoint([c.lat, c.lon]);
+      const sweep = document.getElementById('radar-sweep');
+      sweep.style.left = p.x + 'px';
+      sweep.style.top  = p.y + 'px';
+      sweep.style.transform = 'translate(-50%, -50%)';
+    }
+
+    map.on('move zoom resize', centrarSweep);
+
     function aplicarArea() {
       Object.values(marcadores).forEach(m => map.removeLayer(m));
       Object.values(trilhas).forEach(t => map.removeLayer(t));
@@ -276,6 +291,7 @@
       for (const k in historico) delete historico[k];
       desenharArea();
       map.fitBounds(circuloArea.getBounds());
+      centrarSweep();
       carregarAvioes();
     }
 
@@ -292,13 +308,23 @@
       }
     }
 
-    function textoExtra(d) {
-      if (!d || (!d.modelo && !d.dono && !d.registro)) return "";
-      return `<hr style="margin:6px 0">
-        ${d.registro ? '🏷️ ' + d.registro + '<br>' : ''}
-        ${d.modelo ? '✈️ ' + d.modelo + '<br>' : ''}
-        ${d.fabricante ? '🏭 ' + d.fabricante + '<br>' : ''}
-        ${d.dono ? '🏢 ' + d.dono : ''}`;
+    // Monta o bloco extra do popup com dados da API + Hexdb
+    function textoExtra(a, d) {
+      let s = "";
+      if (a.emergencia)
+        s += `<div style="color:#ff5252;font-weight:bold">🚨 EMERGÊNCIA (${a.squawk})</div>`;
+      if (a.pais !== "Desconhecido") s += "🌎 " + a.pais + "<br>";
+      if (a.registro) s += "🏷️ " + a.registro + "<br>";
+      if (a.tipo) s += "✈️ " + a.tipo + (a.modelo ? " – " + a.modelo : "") + "<br>";
+      if (a.subindo > 100) s += "⬆️ Subindo<br>";
+      else if (a.subindo < -100) s += "⬇️ Descendo<br>";
+      // dados extras do Hexdb (fabricante/dono), se vieram
+      if (d && (d.fabricante || d.dono)) {
+        s += "<hr style='margin:6px 0'>";
+        if (d.fabricante) s += "🏭 " + d.fabricante + "<br>";
+        if (d.dono) s += "🏢 " + d.dono;
+      }
+      return s ? "<hr style='margin:6px 0'>" + s : "";
     }
 
     function renderizar() {
@@ -312,22 +338,23 @@
 
         const popup = `
           <b>${a.bandeira} ${a.callsign}</b><br>
-          País: ${a.pais}<br>
-          Altitude: ${Math.round(a.alt)} m<br>
-          Velocidade: ${Math.round(a.veloc)} m/s<br>
+          Altitude: ${Math.round(a.alt)} ft<br>
+          Velocidade: ${Math.round(a.veloc)} nós<br>
           Situação: ${a.solo ? "No solo" : "Em voo"}`;
 
-        const popupCompleto = popup + textoExtra(detalhesAviao[a.icao]);
+        const popupCompleto = popup + textoExtra(a, detalhesAviao[a.icao]);
 
         if (marcadores[a.icao]) {
           moverSuave(marcadores[a.icao], a.lat, a.lon);
           marcadores[a.icao].setIcon(iconeAviao(a.rumo, cor));
           marcadores[a.icao].setPopupContent(popupCompleto);
           marcadores[a.icao]._popupBase = popup;
+          marcadores[a.icao]._dados = a;
         } else {
           const marcador = L.marker([a.lat, a.lon],
             { icon: iconeAviao(a.rumo, cor) }).addTo(map).bindPopup(popupCompleto);
           marcador._popupBase = popup;
+          marcador._dados = a;
 
           marcador.on('popupopen', async () => {
             if (detalhesAviao[a.icao]) return;
@@ -335,8 +362,7 @@
               const r = await fetch('/api/aviao/' + a.icao);
               const d = await r.json();
               detalhesAviao[a.icao] = d;
-              const extra = textoExtra(d);
-              if (extra) marcador.setPopupContent(marcador._popupBase + extra);
+              marcador.setPopupContent(marcador._popupBase + textoExtra(marcador._dados, d));
             } catch (e) {}
           });
 
@@ -376,10 +402,12 @@
       }
     });
 
-    window.addEventListener('resize', () => map.invalidateSize());
+    window.addEventListener('resize', () => { map.invalidateSize(); centrarSweep(); });
 
+    // Inicialização
     desenharArea();
     map.fitBounds(circuloArea.getBounds());
+    centrarSweep();
     carregarAvioes();
     setInterval(carregarAvioes, 100000);
   </script>
