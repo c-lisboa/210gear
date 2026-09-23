@@ -50,23 +50,43 @@ def api_avioes():
     return jsonify(opensky.avioes_rj())
 
 # ─────────────────────────────────────────────
-# 🌎 Centro padrão (Rio de Janeiro) e bandeiras
+# 🌎 Centro padrão (Rio de Janeiro)
 # ─────────────────────────────────────────────
 CENTRO_PADRAO = {"lat": -22.8, "lon": -43.4, "raio": 80}  # raio em milhas náuticas
 
-PAISES_ISO = {
-    "Brazil": "BR", "United States": "US", "Argentina": "AR",
-    "Chile": "CL", "Paraguay": "PY", "Uruguay": "UY", "Bolivia": "BO",
-    "Portugal": "PT", "Spain": "ES", "France": "FR", "Germany": "DE",
-    "United Kingdom": "GB", "Italy": "IT", "Colombia": "CO", "Peru": "PE",
-    "Panama": "PA", "Mexico": "MX", "Canada": "CA", "Netherlands": "NL",
+# ─────────────────────────────────────────────
+# 🏳️ Prefixos de matrícula → país
+# ─────────────────────────────────────────────
+PREFIXO_PAIS = {
+    "PP": ("Brasil", "BR"), "PR": ("Brasil", "BR"), "PS": ("Brasil", "BR"),
+    "PT": ("Brasil", "BR"), "PU": ("Brasil", "BR"),
+    "LV": ("Argentina", "AR"), "LQ": ("Argentina", "AR"),
+    "CC": ("Chile", "CL"), "CX": ("Uruguai", "UY"),
+    "ZP": ("Paraguai", "PY"), "CP": ("Bolívia", "BO"),
+    "N": ("Estados Unidos", "US"), "C": ("Canadá", "CA"),
+    "G": ("Reino Unido", "GB"), "D": ("Alemanha", "DE"),
+    "F": ("França", "FR"), "EC": ("Espanha", "ES"), "CS": ("Portugal", "PT"),
+    "HK": ("Colômbia", "CO"), "OB": ("Peru", "PE"), "HP": ("Panamá", "PA"),
+    "XA": ("México", "MX"), "XB": ("México", "MX"), "XC": ("México", "MX"),
+    "PH": ("Holanda", "NL"), "I": ("Itália", "IT"),
 }
 
-def bandeira_emoji(pais):
-    iso = PAISES_ISO.get(pais)
-    if not iso:
+def bandeira_de_iso(iso):
+    if not iso or len(iso) != 2:
         return "🏳️"
-    return chr(ord(iso[0]) + 127397) + chr(ord(iso[1]) + 127397)
+    return chr(ord(iso[0].upper()) + 127397) + chr(ord(iso[1].upper()) + 127397)
+
+def pais_por_registro(reg):
+    """Descobre o país pelo prefixo da matrícula (PR-ABC → Brasil)."""
+    if not reg:
+        return ("Desconhecido", "🏳️")
+    r = reg.upper().replace("-", "")
+    for tam in (2, 1):  # tenta prefixo de 2 letras, depois de 1
+        pref = r[:tam]
+        if pref in PREFIXO_PAIS:
+            nome, iso = PREFIXO_PAIS[pref]
+            return (nome, bandeira_de_iso(iso))
+    return ("Desconhecido", "🏳️")
 
 # ─────────────────────────────────────────────
 # 🚦 Cache de tráfego (protege contra excesso de requisições)
@@ -76,18 +96,16 @@ _cache_trafego = {}  # chave = "lat,lon,raio" → {"dados": [...], "hora": times
 
 @app.route("/api/trafego")
 def api_trafego():
-    # Agora recebemos DIRETO: centro (lat, lon) e raio em milhas náuticas
+    # centro (lat, lon) e raio em milhas náuticas
     lat = request.args.get("lat", CENTRO_PADRAO["lat"], type=float)
     lon = request.args.get("lon", CENTRO_PADRAO["lon"], type=float)
     raio_nm = request.args.get("raio", CENTRO_PADRAO["raio"], type=float)
-
-    # adsb.lol limita o raio a 250 nm
-    raio_nm = max(1, min(raio_nm, 250))
+    raio_nm = max(1, min(raio_nm, 250))  # adsb.lol limita a 250 nm
 
     chave = f"{round(lat, 3)},{round(lon, 3)},{round(raio_nm)}"
     agora = time.time()
 
-    # 1) Se tem cache recente, devolve sem bater na API
+    # 1) Cache recente → devolve sem bater na API
     cache = _cache_trafego.get(chave)
     if cache and (agora - cache["hora"] < CACHE_SEGUNDOS):
         return jsonify(cache["dados"])
@@ -110,17 +128,36 @@ def api_trafego():
         lon_a = a.get("lon")
         if lat_a is None or lon_a is None:
             continue
+
+        registro = a.get("r", "") or ""
+        pais, bandeira = pais_por_registro(registro)
+
+        alt_baro = a.get("alt_baro")
+        no_solo = alt_baro == "ground"
+        alt = alt_baro if isinstance(alt_baro, (int, float)) else 0
+
+        squawk = a.get("squawk", "") or ""
+        emergencia = squawk in ("7500", "7600", "7700")
+
         avioes.append({
             "icao": a.get("hex", ""),
             "callsign": (a.get("flight") or "").strip() or "N/D",
-            "pais": a.get("flag") or "Desconhecido",
-            "bandeira": "✈️",
+            "pais": pais,
+            "bandeira": bandeira,
             "lon": lon_a,
             "lat": lat_a,
-            "alt": a.get("alt_baro") if isinstance(a.get("alt_baro"), (int, float)) else 0,
-            "solo": a.get("alt_baro") == "ground",
-            "veloc": a.get("gs") or 0,
-            "rumo": a.get("track") or 0,
+            "alt": alt,                         # altitude barométrica (ft)
+            "solo": no_solo,
+            "veloc": a.get("gs") or 0,          # velocidade solo (nós)
+            "rumo": a.get("track") or 0,        # proa
+            # 🆕 novos campos vindos direto da API
+            "registro": registro,               # matrícula (PR-ABC)
+            "tipo": a.get("t", "") or "",        # código ICAO do tipo (A320)
+            "modelo": a.get("desc", "") or "",   # descrição do modelo
+            "subindo": a.get("baro_rate") or 0,  # ft/min (+sobe / -desce)
+            "squawk": squawk,
+            "emergencia": emergencia,
+            "categoria": a.get("category", "") or "",
         })
 
     # 4) Salva no cache e devolve
