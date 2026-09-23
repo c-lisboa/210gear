@@ -79,18 +79,18 @@ ul.metar li .icone { font-size:1.3em; margin-right:8px; }
 #wrap { flex: 1; display: flex; overflow: hidden; position: relative; }
 
 #radar-sweep {
+  #radar-sweep {
   position: absolute;
   top: 50%;
-  left: calc(50% - 150px);   /* desloca p/ centro do MAPA (painel tem 300px) */
+  left: calc(50% - 150px);
   width: 150vh; height: 150vh;
   transform: translate(-50%, -50%);
   pointer-events: none;
-  z-index: 500;
+  z-index: 9999;          /* era 500 — subiu p/ ficar acima do mapa */
   border-radius: 50%;
   overflow: hidden;
 }
 
-/* ═══════════ FEIXE DO RADAR (o que faltava) ═══════════ */
 #radar-sweep .feixe {
   position: absolute;
   top: 0; left: 0;
@@ -102,9 +102,11 @@ ul.metar li .icone { font-size:1.3em; margin-right:8px; }
     rgba(0,255,136,0.05) 70deg,
     transparent 100deg,
     transparent 360deg);
+  mix-blend-mode: screen;   /* deixa o mapa aparecer através do feixe */
   transform-origin: center center;
   animation: girar 4s linear infinite;
 }
+
 
 @keyframes girar {
   from { transform: rotate(0deg); }
