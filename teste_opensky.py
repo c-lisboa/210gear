@@ -9,7 +9,7 @@ TOKEN_URL = ("https://auth.opensky-network.org/auth/realms/"
 STATES_URL = "https://opensky-network.org/api/states/all"
 
 # Região do Rio de Janeiro (bounding box)
-LAT, LON, D = -22.8, -43.4, 4.0  # ~240 NM
+LAT, LON, D = -22.82, -43.32, 4.0  # ~240 NM
 
 
 @app.route("/")
