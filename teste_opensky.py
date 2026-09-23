@@ -6,6 +6,10 @@ app = Flask(__name__)
 
 TOKEN_URL = "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token"
 
+@app.route("/ping")
+def ping():
+    return "vivo!"
+
 @app.route("/")
 def diagnostico():
     diag = {}
