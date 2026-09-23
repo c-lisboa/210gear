@@ -67,24 +67,26 @@
     .item .call { font-weight: bold; font-size: 14px; color: #fff; }
     .item .info { font-size: 11px; opacity: 0.8; margin-top: 3px; }
 
-    /* Radar girando — ancorado ao #map e recentrado no ponto geográfico */
+    /* ── Radar ── Wrapper: só posiciona no centro geográfico */
     #radar-sweep {
       position: absolute; top: 50%; left: 50%;
-      width: 150vh; height: 150vh; transform: translate(-50%, -50%);
+      width: 150vh; height: 150vh;
+      margin-left: -75vh; margin-top: -75vh;   /* centraliza sem usar transform */
       pointer-events: none; z-index: 400; border-radius: 50%; overflow: hidden;
     }
-    #radar-sweep::before {
-      content: ""; position: absolute; top: 0; left: 0;
+    /* Feixe que GIRA */
+    #radar-sweep .feixe {
+      position: absolute; top: 0; left: 0;
       width: 100%; height: 100%; border-radius: 50%;
       background: conic-gradient(from 0deg,
         rgba(77, 255, 136, 0.35) 0deg, rgba(77, 255, 136, 0.08) 25deg,
         transparent 60deg, transparent 360deg);
       animation: girar 4s linear infinite;
     }
-    #radar-sweep::after {
-      content: ""; position: absolute; top: 50%; left: 50%;
-      width: 100%; height: 100%; transform: translate(-50%, -50%);
-      border-radius: 50%; pointer-events: none;
+    /* Anéis fixos */
+    #radar-sweep .aneis {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%; border-radius: 50%; pointer-events: none;
       background:
         radial-gradient(circle, transparent 24%, rgba(77,255,136,0.15) 25%, transparent 26%),
         radial-gradient(circle, transparent 49%, rgba(77,255,136,0.15) 50%, transparent 51%),
@@ -111,7 +113,10 @@
 
   <div id="wrap">
     <div id="map">
-      <div id="radar-sweep"></div>
+      <div id="radar-sweep">
+        <div class="aneis"></div>
+        <div class="feixe"></div>
+      </div>
     </div>
 
     <div id="painel">
@@ -270,7 +275,7 @@
       }).addTo(map);
     }
 
-    // 🆕 Recentra o sweep no centro geográfico do círculo (segue o mapa)
+    // Recentra o sweep no centro geográfico do círculo (sem transform — só posição)
     function centrarSweep() {
       const c = lerCentro();
       if (isNaN(c.lat) || isNaN(c.lon)) return;
@@ -278,7 +283,8 @@
       const sweep = document.getElementById('radar-sweep');
       sweep.style.left = p.x + 'px';
       sweep.style.top  = p.y + 'px';
-      sweep.style.transform = 'translate(-50%, -50%)';
+      // NÃO usar transform aqui — a margem negativa já centraliza,
+      // e o transform é exclusivo da animação do feixe.
     }
 
     map.on('move zoom resize', centrarSweep);
@@ -318,7 +324,6 @@
       if (a.tipo) s += "✈️ " + a.tipo + (a.modelo ? " – " + a.modelo : "") + "<br>";
       if (a.subindo > 100) s += "⬆️ Subindo<br>";
       else if (a.subindo < -100) s += "⬇️ Descendo<br>";
-      // dados extras do Hexdb (fabricante/dono), se vieram
       if (d && (d.fabricante || d.dono)) {
         s += "<hr style='margin:6px 0'>";
         if (d.fabricante) s += "🏭 " + d.fabricante + "<br>";
