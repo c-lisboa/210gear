@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block titulo %}Buscar voo{% endblock %}
+{% block conteudo %}
+<h1>✈️ Buscar voo por número</h1>
+
+<form onsubmit="buscarVoo(event)">
+  <input id="callsign" placeholder="Ex: TAM3456, GLO1234, AZU4021" autofocus>
+  <button>Buscar</button>
+</form>
+
+<p id="status" style="margin-top:10px;color:#7f8c8d"></p>
+
+<div id="resultado" style="display:none">
+  <div class="badge-resumo" id="cabecalho" style="background:#1a3a5a"></div>
+
+  <table>
+    <tr><th>Campo</th><th>Valor</th></tr>
+    <tbody id="detalhes"></tbody>
+  </table>
+
+  <button id="btnMapa" style="margin-bottom:20px">🗺️ Ver no mapa ao vivo</button>
+
+  <div id="mapa" style="height:320px"></div>
+</div>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+let mapaVoo = null, marcadorVoo = null;
+
+function corPorAltitude(alt, solo) {
+  if (solo) return "#9e9e9e";
+  if (alt < 1500) return "#ff5252";
+  if (alt < 4000) return "#ffab40";
+  if (alt < 8000) return "#e0c000";
+  return "#0077cc";
+}
+
+async function buscarVoo(ev) {
+  ev.preventDefault();
+  const cs = document.getElementById('callsign').value.trim();
+  if (!cs) return;
+
+  const status = document.getElementById('status');
+  const resultado = document.getElementById('resultado');
+  status.textContent = "🔎 Buscando...";
+  resultado.style.display = "none";
+
+  try {
+    const r = await fetch('/api/voo/' + encodeURIComponent(cs));
+    const a = await r.json();
+
+    if (a.erro) { status.textContent = "⚠️ " + a.erro; return; }
+
+    status.textContent = "";
+    resultado.style.display = "block";
+
+    // cabeçalho
+    document.getElementById('cabecalho').innerHTML =
+      `<span class="badge-icone">${a.bandeira}</span> ${a.callsign}
+       ${a.emergencia ? '🚨 EMERGÊNCIA' : ''}`;
+
+    // tabela de detalhes
+    const linhas = [
+      ["Situação", a.solo ? "No solo" : "Em voo"],
+      ["Altitude", Math.round(a.alt) + " ft"],
+      ["Velocidade", Math.round(a.veloc) + " nós"],
+      ["Rumo (proa)", Math.round(a.rumo) + "°"],
+      ["Subindo/Descendo", a.subindo > 100 ? "⬆️ Subindo" : a.subindo < -100 ? "⬇️ Descendo" : "➡️ Nivelado"],
+      ["País", a.pais],
+      ["Matrícula", a.registro || "—"],
+      ["Tipo", (a.tipo || "—") + (a.modelo ? " – " + a.modelo : "")],
+      ["ICAO24", a.icao],
+      ["Squawk", a.squawk || "—"],
+    ];
+    document.getElementById('detalhes').innerHTML =
+      linhas.map(([k, v]) => `<tr><td><b>${k}</b></td><td>${v}</td></tr>`).join('');
+
+    // botão "ver no mapa" → abre /mapa centralizado
+    document.getElementById('btnMapa').onclick = () => {
+      window.open(`/mapa?lat=${a.lat}&lon=${a.lon}&raio=40`, '_blank');
+    };
+
+    // mini-mapa aqui mesmo
+    if (a.lat != null && a.lon != null) {
+      if (!mapaVoo) {
+        mapaVoo = L.map('mapa').setView([a.lat, a.lon], 8);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+          { attribution: '© OpenStreetMap' }).addTo(mapaVoo);
+      } else {
+        mapaVoo.setView([a.lat, a.lon], 8);
+        if (marcadorVoo) mapaVoo.removeLayer(marcadorVoo);
+      }
+      const cor = corPorAltitude(a.alt, a.solo);
+      marcadorVoo = L.marker([a.lat, a.lon], {
+        icon: L.divIcon({
+          className: '',
+          html: `<div style="transform:rotate(${a.rumo}deg);font-size:26px;
+                   color:${cor};text-shadow:0 0 6px ${cor}">✈️</div>`,
+          iconSize: [26, 26], iconAnchor: [13, 13]
+        })
+      }).addTo(mapaVoo).bindPopup(`<b>${a.callsign}</b>`).openPopup();
+      setTimeout(() => mapaVoo.invalidateSize(), 200);
+    } else {
+      status.textContent = "Voo encontrado, mas sem posição no momento.";
+    }
+  } catch (e) {
+    status.textContent = "❌ Erro ao buscar.";
+  }
+}
+</script>
+{% endblock %}
