@@ -12,9 +12,8 @@ app = Flask(__name__)
 # 🌐 Fontes de dados ADS-B (todas usam o mesmo formato v2)
 # ─────────────────────────────────────────────
 FONTES_ADSB = [
-    "https://api.adsb.lol",   # aberta, sem bloqueio — fonte principal
-    "https://api.adsb.one",   # airplanes.live — reserva (pode bloquear)
-    "https://opendata.adsb.fi",  # adsb.fi — mesmo formato v2, aberta
+    "https://api.adsb.lol",   # aberta, principal
+    "https://api.adsb.fi",    # adsb.fi — URL correta (era opendata.*, estava errada)
 ]
 
 # Cabeçalho: alguns serviços (adsb.one/Cloudflare) exigem User-Agent
