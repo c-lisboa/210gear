@@ -9,6 +9,33 @@ from services import airports, metar, opensky
 app = Flask(__name__)
 
 # ─────────────────────────────────────────────
+# 🌐 Fontes de dados ADS-B (todas usam o mesmo formato v2)
+# Tenta em ordem; a primeira que responder com aeronaves vence.
+# ─────────────────────────────────────────────
+FONTES_ADSB = [
+    "https://api.adsb.one",   # airplanes.live — melhor cobertura no Brasil
+    "https://api.adsb.lol",   # reserva
+]
+
+def buscar_adsb(caminho):
+    """
+    Tenta cada fonte ADS-B até obter aeronaves.
+    caminho ex: '/v2/point/-22.8/-43.4/80' ou '/v2/callsign/GLO1234'
+    Retorna a lista 'ac' (pode ser vazia) e a base que respondeu.
+    """
+    ultima_lista = []
+    for base in FONTES_ADSB:
+        try:
+            r = requests.get(base + caminho, timeout=(5, 10))
+            ac = r.json().get("ac") or []
+            if ac:
+                return ac  # achou aviões nesta fonte → usa
+            ultima_lista = ac
+        except Exception as e:
+            print(f"Erro em {base}{caminho}:", e)
+    return ultima_lista  # nenhuma trouxe aviões → devolve vazia
+
+# ─────────────────────────────────────────────
 # 🗺️ Rotas de páginas
 # ─────────────────────────────────────────────
 @app.route("/")
@@ -93,6 +120,43 @@ def pais_por_registro(reg):
     return ("Desconhecido", "🏳️")
 
 # ─────────────────────────────────────────────
+# 🔧 Converte 1 aeronave crua da API → formato do site
+# ─────────────────────────────────────────────
+def montar_aviao(a):
+    lat_a = a.get("lat")
+    lon_a = a.get("lon")
+
+    registro = a.get("r", "") or ""
+    pais, bandeira = pais_por_registro(registro)
+
+    alt_baro = a.get("alt_baro")
+    no_solo = alt_baro == "ground"
+    alt = alt_baro if isinstance(alt_baro, (int, float)) else 0
+
+    squawk = a.get("squawk", "") or ""
+    emergencia = squawk in ("7500", "7600", "7700")
+
+    return {
+        "icao": a.get("hex", ""),
+        "callsign": (a.get("flight") or "").strip() or "N/D",
+        "pais": pais,
+        "bandeira": bandeira,
+        "lon": lon_a,
+        "lat": lat_a,
+        "alt": alt,                          # altitude barométrica (ft)
+        "solo": no_solo,
+        "veloc": a.get("gs") or 0,           # velocidade solo (nós)
+        "rumo": a.get("track") or 0,         # proa
+        "registro": registro,                # matrícula (PR-ABC)
+        "tipo": a.get("t", "") or "",         # código ICAO do tipo (A320)
+        "modelo": a.get("desc", "") or "",    # descrição do modelo
+        "subindo": a.get("baro_rate") or 0,   # ft/min (+sobe / -desce)
+        "squawk": squawk,
+        "emergencia": emergencia,
+        "categoria": a.get("category", "") or "",
+    }
+
+# ─────────────────────────────────────────────
 # 🚦 Cache de tráfego (protege contra excesso de requisições)
 # ─────────────────────────────────────────────
 CACHE_SEGUNDOS = 8
@@ -104,7 +168,7 @@ def api_trafego():
     lat = request.args.get("lat", CENTRO_PADRAO["lat"], type=float)
     lon = request.args.get("lon", CENTRO_PADRAO["lon"], type=float)
     raio_nm = request.args.get("raio", CENTRO_PADRAO["raio"], type=float)
-    raio_nm = max(1, min(raio_nm, 250))  # adsb.lol limita a 250 nm
+    raio_nm = max(1, min(raio_nm, 250))  # limite de 250 nm
 
     chave = f"{round(lat, 3)},{round(lon, 3)},{round(raio_nm)}"
     agora = time.time()
@@ -114,62 +178,25 @@ def api_trafego():
     if cache and (agora - cache["hora"] < CACHE_SEGUNDOS):
         return jsonify(cache["dados"])
 
-    # 2) Busca na adsb.lol (grátis, sem chave, funciona na nuvem)
-    try:
-        url = f"https://api.adsb.lol/v2/point/{lat}/{lon}/{raio_nm}"
-        r = requests.get(url, timeout=(5, 10))
-        aeronaves = r.json().get("ac") or []
-    except Exception as e:
-        print("Erro adsb.lol:", e)
-        if cache:
-            return jsonify(cache["dados"])
-        return jsonify([])
+    # 2) Busca nas fontes ADS-B (cascata: adsb.one → adsb.lol)
+    aeronaves = buscar_adsb(f"/v2/point/{lat}/{lon}/{raio_nm}")
+    if not aeronaves and cache:
+        # nenhuma fonte trouxe dados agora → mantém o último resultado bom
+        return jsonify(cache["dados"])
 
     # 3) Monta a lista de aviões
     avioes = []
     for a in aeronaves:
-        lat_a = a.get("lat")
-        lon_a = a.get("lon")
-        if lat_a is None or lon_a is None:
+        if a.get("lat") is None or a.get("lon") is None:
             continue
-
-        registro = a.get("r", "") or ""
-        pais, bandeira = pais_por_registro(registro)
-
-        alt_baro = a.get("alt_baro")
-        no_solo = alt_baro == "ground"
-        alt = alt_baro if isinstance(alt_baro, (int, float)) else 0
-
-        squawk = a.get("squawk", "") or ""
-        emergencia = squawk in ("7500", "7600", "7700")
-
-        avioes.append({
-            "icao": a.get("hex", ""),
-            "callsign": (a.get("flight") or "").strip() or "N/D",
-            "pais": pais,
-            "bandeira": bandeira,
-            "lon": lon_a,
-            "lat": lat_a,
-            "alt": alt,                         # altitude barométrica (ft)
-            "solo": no_solo,
-            "veloc": a.get("gs") or 0,          # velocidade solo (nós)
-            "rumo": a.get("track") or 0,        # proa
-            # 🆕 novos campos vindos direto da API
-            "registro": registro,               # matrícula (PR-ABC)
-            "tipo": a.get("t", "") or "",        # código ICAO do tipo (A320)
-            "modelo": a.get("desc", "") or "",   # descrição do modelo
-            "subindo": a.get("baro_rate") or 0,  # ft/min (+sobe / -desce)
-            "squawk": squawk,
-            "emergencia": emergencia,
-            "categoria": a.get("category", "") or "",
-        })
+        avioes.append(montar_aviao(a))
 
     # 4) Salva no cache e devolve
     _cache_trafego[chave] = {"dados": avioes, "hora": agora}
     return jsonify(avioes)
 
 # ─────────────────────────────────────────────
-# 🔎 Busca de voo por callsign (adsb.lol global)
+# 🔎 Busca de voo por callsign (cascata de fontes)
 # ─────────────────────────────────────────────
 @app.route("/api/voo/<callsign>")
 def api_voo(callsign):
@@ -177,45 +204,13 @@ def api_voo(callsign):
     if not cs:
         return jsonify({"erro": "Informe um número de voo."})
 
-    try:
-        url = f"https://api.adsb.lol/v2/callsign/{cs}"
-        r = requests.get(url, timeout=(5, 10))
-        aeronaves = r.json().get("ac") or []
-    except Exception as e:
-        print("Erro adsb.lol callsign:", e)
-        return jsonify({"erro": "Falha ao consultar a API."})
-
+    aeronaves = buscar_adsb(f"/v2/callsign/{cs}")
     if not aeronaves:
         return jsonify({"erro": "Voo não encontrado no ar agora."})
 
     # pega a primeira aeronave que tenha posição
     a = next((x for x in aeronaves if x.get("lat") is not None), aeronaves[0])
-
-    registro = a.get("r", "") or ""
-    pais, bandeira = pais_por_registro(registro)
-    alt_baro = a.get("alt_baro")
-    no_solo = alt_baro == "ground"
-    alt = alt_baro if isinstance(alt_baro, (int, float)) else 0
-    squawk = a.get("squawk", "") or ""
-
-    return jsonify({
-        "icao": a.get("hex", ""),
-        "callsign": (a.get("flight") or cs).strip(),
-        "pais": pais,
-        "bandeira": bandeira,
-        "lat": a.get("lat"),
-        "lon": a.get("lon"),
-        "alt": alt,
-        "solo": no_solo,
-        "veloc": a.get("gs") or 0,
-        "rumo": a.get("track") or 0,
-        "registro": registro,
-        "tipo": a.get("t", "") or "",
-        "modelo": a.get("desc", "") or "",
-        "subindo": a.get("baro_rate") or 0,
-        "squawk": squawk,
-        "emergencia": squawk in ("7500", "7600", "7700"),
-    })
+    return jsonify(montar_aviao(a))
 
 # ─────────────────────────────────────────────
 # 🔍 Detalhes da aeronave (Hexdb.io — grátis, sem chave)
