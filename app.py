@@ -253,5 +253,34 @@ def info_aviao(icao):
     _cache_aviao[icao] = resultado
     return jsonify(resultado)
 
+
+# ─────────────────────────────────────────────
+# 🩺 Diagnóstico das fontes ADS-B (acesse /diagnostico no navegador)
+# ─────────────────────────────────────────────
+@app.route("/diagnostico")
+def diagnostico():
+    caminho = "/v2/point/-22.8/-43.4/80"
+    linhas = ["<h2>Diagnóstico das fontes ADS-B</h2>",
+              f"<p>Testando: <code>{caminho}</code></p><ul>"]
+    for base in FONTES_ADSB:
+        try:
+            r = requests.get(base + caminho,
+                             headers=CABECALHOS_ADSB,
+                             timeout=(5, 10))
+            status = r.status_code
+            try:
+                qtd = len(r.json().get("ac") or [])
+                info = f"✅ <b>{status}</b> — <b>{qtd}</b> aeronaves"
+            except Exception:
+                # não veio JSON (provável bloqueio HTML do Cloudflare)
+                trecho = r.text[:120].replace("<", "&lt;")
+                info = f"⚠️ <b>{status}</b> — resposta não-JSON: <code>{trecho}...</code>"
+        except Exception as e:
+            info = f"❌ ERRO: {e}"
+        linhas.append(f"<li><b>{base}</b><br>{info}</li><br>")
+    linhas.append("</ul>")
+    return "".join(linhas)
+
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=7860)
