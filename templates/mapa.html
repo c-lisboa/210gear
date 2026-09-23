@@ -109,6 +109,7 @@
     <a href="/">🏠 Início</a>
     <a href="/busca">🔎 Busca ICAO/IATA</a>
     <a href="/mapa">🗺️ Mapa ao vivo</a>
+    <a href="/voo">🛫 Buscar voo</a>
   </nav>
 
   <div id="wrap">
@@ -409,7 +410,12 @@
 
     window.addEventListener('resize', () => { map.invalidateSize(); centrarSweep(); });
 
-    // Inicialização
+    // Inicialização — lê lat/lon/raio da URL, se vierem
+    const params = new URLSearchParams(location.search);
+    if (params.has('lat')) document.getElementById('lat').value = params.get('lat');
+    if (params.has('lon')) document.getElementById('lon').value = params.get('lon');
+    if (params.has('raio')) document.getElementById('raio').value = params.get('raio');
+
     desenharArea();
     map.fitBounds(circuloArea.getBounds());
     centrarSweep();
