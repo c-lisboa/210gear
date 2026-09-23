@@ -25,7 +25,7 @@ CABECALHOS_ADSB = {
 def buscar_adsb(caminho):
     """
     Tenta cada fonte ADS-B até obter aeronaves.
-    caminho ex: '/v2/point/-22.8/-43.4/80' ou '/v2/callsign/GLO1234'
+    caminho ex: '/v2/point/-22.82/-43.32/10' ou '/v2/callsign/GLO1234'
     """
     ultima_lista = []
     for base in FONTES_ADSB:
