@@ -232,28 +232,47 @@ def info_foto(icao):
     if not icao:
         return jsonify({})
 
-    if icao in _cache_foto:
+    # só usa cache se tiver foto de verdade
+    if _cache_foto.get(icao, {}).get("thumb"):
         return jsonify(_cache_foto[icao])
 
+    reg = request.args.get("reg", "").strip().upper()
     resultado = {}
-    try:
-        r = requests.get(
-            f"https://api.planespotters.net/pub/photos/hex/{icao}",
-            headers={"User-Agent": "SiteAviacaoRJ/1.0"}, timeout=8)
-        if r.ok:
-            fotos = r.json().get("photos") or []
-            if fotos:
-                f = fotos[0]
-                resultado = {
-                    "thumb": f.get("thumbnail", {}).get("src", ""),
-                    "link": f.get("link", ""),
-                    "autor": f.get("photographer", ""),
-                }
-    except Exception as e:
-        print("Erro Planespotters:", e)
+    headers = {"User-Agent": "SiteAviacaoRJ/1.0 (contato@exemplo.com)"}
 
-    _cache_foto[icao] = resultado
+    def _extrair(js):
+        fotos = (js or {}).get("photos") or []
+        if not fotos:
+            return {}
+        f = fotos[0]
+        return {
+            "thumb": (f.get("thumbnail_large") or f.get("thumbnail") or {}).get("src", ""),
+            "link": f.get("link", ""),
+            "autor": f.get("photographer", ""),
+        }
+
+    try:
+        # 1) por hex
+        url = f"https://api.planespotters.net/pub/photos/hex/{icao}"
+        r = requests.get(url, headers=headers, timeout=10)
+        print(f"[FOTO] hex {icao} -> {r.status_code}")
+        if r.ok:
+            resultado = _extrair(r.json())
+
+        # 2) fallback por registro (matrícula), se veio e não achou por hex
+        if not resultado.get("thumb") and reg:
+            url = f"https://api.planespotters.net/pub/photos/reg/{reg}"
+            r = requests.get(url, headers=headers, timeout=10)
+            print(f"[FOTO] reg {reg} -> {r.status_code}")
+            if r.ok:
+                resultado = _extrair(r.json())
+    except Exception as e:
+        print("[FOTO] erro:", e)
+
+    if resultado.get("thumb"):
+        _cache_foto[icao] = resultado
     return jsonify(resultado)
+
 
 
 # ─────────────────────────────────────────────
