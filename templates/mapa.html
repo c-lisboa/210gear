@@ -170,6 +170,7 @@
     let circuloArea = null;
 
     const detalhesAviao = {};
+    const fotosAviao = {};   // ← NOVO: cache das fotos por icao
     const historico = {};
     const trilhas = {};
     const MAX_PONTOS = 15;
@@ -315,9 +316,21 @@
       }
     }
 
-    // Monta o bloco extra do popup com dados da API + Hexdb
-    function textoExtra(a, d) {
+        // Monta o bloco extra do popup com dados da API + Hexdb + foto
+    function textoExtra(a, d, foto) {
       let s = "";
+
+      // 📸 Foto no topo (se já buscada)
+      if (foto && foto.thumb) {
+        s += `<div style="margin-bottom:6px">
+                <a href="${foto.link}" target="_blank">
+                  <img src="${foto.thumb}" alt="Foto da aeronave"
+                       style="width:100%;max-width:240px;border-radius:6px;display:block">
+                </a>
+                ${foto.autor ? `<div style="font-size:10px;opacity:.7">📷 ${foto.autor}</div>` : ""}
+              </div>`;
+      }
+
       if (a.emergencia)
         s += `<div style="color:#ff5252;font-weight:bold">🚨 EMERGÊNCIA (${a.squawk})</div>`;
       if (a.pais !== "Desconhecido") s += "🌎 " + a.pais + "<br>";
@@ -332,6 +345,7 @@
       }
       return s ? "<hr style='margin:6px 0'>" + s : "";
     }
+
 
     function renderizar() {
       const filtrados = dadosAtuais.filter(passaFiltro);
@@ -353,28 +367,39 @@
         if (marcadores[a.icao]) {
           moverSuave(marcadores[a.icao], a.lat, a.lon);
           marcadores[a.icao].setIcon(iconeAviao(a.rumo, cor));
-          marcadores[a.icao].setPopupContent(popupCompleto);
+          marcadores[a.icao].setPopupContent(
+            popup + textoExtra(a, detalhesAviao[a.icao], fotosAviao[a.icao])
+          );
           marcadores[a.icao]._popupBase = popup;
           marcadores[a.icao]._dados = a;
         } else {
           const marcador = L.marker([a.lat, a.lon],
-            { icon: iconeAviao(a.rumo, cor) }).addTo(map).bindPopup(popupCompleto);
+            { icon: iconeAviao(a.rumo, cor) }).addTo(map)
+            .bindPopup(popup + textoExtra(a, detalhesAviao[a.icao], fotosAviao[a.icao]));
           marcador._popupBase = popup;
           marcador._dados = a;
 
           marcador.on('popupopen', async () => {
-            if (detalhesAviao[a.icao]) return;
+            // busca detalhes (Hexdb) e foto (Planespotters) em paralelo
+            const precisaDetalhe = !detalhesAviao[a.icao];
+            const precisaFoto = !fotosAviao[a.icao];
+            if (!precisaDetalhe && !precisaFoto) return;
+
             try {
-              const r = await fetch('/api/aviao/' + a.icao);
-              const d = await r.json();
-              detalhesAviao[a.icao] = d;
-              marcador.setPopupContent(marcador._popupBase + textoExtra(marcador._dados, d));
+              const [rd, rf] = await Promise.all([
+                precisaDetalhe ? fetch('/api/aviao/' + a.icao) : null,
+                precisaFoto ? fetch('/api/foto/' + a.icao) : null,
+              ]);
+              if (rd) detalhesAviao[a.icao] = await rd.json();
+              if (rf) fotosAviao[a.icao] = await rf.json();
+
+              marcador.setPopupContent(
+                marcador._popupBase +
+                textoExtra(marcador._dados, detalhesAviao[a.icao], fotosAviao[a.icao])
+              );
             } catch (e) {}
           });
 
-          marcadores[a.icao] = marcador;
-        }
-      });
 
       Object.keys(marcadores).forEach(icao => {
         if (!ativos.has(icao)) {
