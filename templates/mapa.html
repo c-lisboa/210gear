@@ -170,7 +170,7 @@
     let circuloArea = null;
 
     const detalhesAviao = {};
-    const fotosAviao = {};   // ← NOVO: cache das fotos por icao
+    const fotosAviao = {};   // ← cache das fotos por icao
     const historico = {};
     const trilhas = {};
     const MAX_PONTOS = 15;
@@ -285,8 +285,6 @@
       const sweep = document.getElementById('radar-sweep');
       sweep.style.left = p.x + 'px';
       sweep.style.top  = p.y + 'px';
-      // NÃO usar transform aqui — a margem negativa já centraliza,
-      // e o transform é exclusivo da animação do feixe.
     }
 
     map.on('move zoom resize', centrarSweep);
@@ -316,7 +314,7 @@
       }
     }
 
-        // Monta o bloco extra do popup com dados da API + Hexdb + foto
+    // Monta o bloco extra do popup com dados da API + Hexdb + foto
     function textoExtra(a, d, foto) {
       let s = "";
 
@@ -346,7 +344,6 @@
       return s ? "<hr style='margin:6px 0'>" + s : "";
     }
 
-
     function renderizar() {
       const filtrados = dadosAtuais.filter(passaFiltro);
       const ativos = new Set();
@@ -362,20 +359,18 @@
           Velocidade: ${Math.round(a.veloc)} nós<br>
           Situação: ${a.solo ? "No solo" : "Em voo"}`;
 
-        const popupCompleto = popup + textoExtra(a, detalhesAviao[a.icao]);
+        const popupCompleto = popup +
+          textoExtra(a, detalhesAviao[a.icao], fotosAviao[a.icao]);
 
         if (marcadores[a.icao]) {
           moverSuave(marcadores[a.icao], a.lat, a.lon);
           marcadores[a.icao].setIcon(iconeAviao(a.rumo, cor));
-          marcadores[a.icao].setPopupContent(
-            popup + textoExtra(a, detalhesAviao[a.icao], fotosAviao[a.icao])
-          );
+          marcadores[a.icao].setPopupContent(popupCompleto);
           marcadores[a.icao]._popupBase = popup;
           marcadores[a.icao]._dados = a;
         } else {
           const marcador = L.marker([a.lat, a.lon],
-            { icon: iconeAviao(a.rumo, cor) }).addTo(map)
-            .bindPopup(popup + textoExtra(a, detalhesAviao[a.icao], fotosAviao[a.icao]));
+            { icon: iconeAviao(a.rumo, cor) }).addTo(map).bindPopup(popupCompleto);
           marcador._popupBase = popup;
           marcador._dados = a;
 
@@ -400,6 +395,9 @@
             } catch (e) {}
           });
 
+          marcadores[a.icao] = marcador;
+        }
+      });
 
       Object.keys(marcadores).forEach(icao => {
         if (!ativos.has(icao)) {
