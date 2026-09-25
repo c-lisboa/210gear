@@ -13,6 +13,8 @@
 <div id="resultado" style="display:none">
   <div class="badge-resumo" id="cabecalho" style="background:#1a3a5a"></div>
 
+  <div id="fotoVoo" style="margin:12px 0"></div>
+
   <table>
     <tr><th>Campo</th><th>Valor</th></tr>
     <tbody id="detalhes"></tbody>
@@ -36,6 +38,26 @@ function corPorAltitude(alt, solo) {
   return "#0077cc";
 }
 
+async function carregarFoto(icao, registro) {
+  const div = document.getElementById('fotoVoo');
+  div.innerHTML = "";
+  if (!icao) return;
+  try {
+    const url = '/api/foto/' + icao +
+      (registro ? '?reg=' + encodeURIComponent(registro) : '');
+    const r = await fetch(url);
+    const foto = await r.json();
+    if (foto && foto.thumb) {
+      div.innerHTML = `
+        <a href="${foto.link}" target="_blank">
+          <img src="${foto.thumb}" alt="Foto da aeronave"
+               style="width:100%;max-width:400px;border-radius:8px;display:block">
+        </a>
+        ${foto.autor ? `<div style="font-size:11px;opacity:.7;margin-top:4px">📷 ${foto.autor}</div>` : ""}`;
+    }
+  } catch (e) {}
+}
+
 async function buscarVoo(ev) {
   ev.preventDefault();
   const cs = document.getElementById('callsign').value.trim();
@@ -45,6 +67,7 @@ async function buscarVoo(ev) {
   const resultado = document.getElementById('resultado');
   status.textContent = "🔎 Buscando...";
   resultado.style.display = "none";
+  document.getElementById('fotoVoo').innerHTML = "";
 
   try {
     const r = await fetch('/api/voo/' + encodeURIComponent(cs));
@@ -59,6 +82,9 @@ async function buscarVoo(ev) {
     document.getElementById('cabecalho').innerHTML =
       `<span class="badge-icone">${a.bandeira}</span> ${a.callsign}
        ${a.emergencia ? '🚨 EMERGÊNCIA' : ''}`;
+
+    // foto da aeronave
+    carregarFoto(a.icao, a.registro);
 
     // tabela de detalhes
     const linhas = [
