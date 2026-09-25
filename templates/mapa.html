@@ -67,14 +67,12 @@
     .item .call { font-weight: bold; font-size: 14px; color: #fff; }
     .item .info { font-size: 11px; opacity: 0.8; margin-top: 3px; }
 
-    /* ── Radar ── Wrapper: só posiciona no centro geográfico */
     #radar-sweep {
       position: absolute; top: 50%; left: 50%;
       width: 150vh; height: 150vh;
-      margin-left: -75vh; margin-top: -75vh;   /* centraliza sem usar transform */
+      margin-left: -75vh; margin-top: -75vh;
       pointer-events: none; z-index: 999; border-radius: 50%; overflow: hidden;
     }
-    /* Feixe que GIRA */
     #radar-sweep .feixe {
       position: absolute; top: 0; left: 0;
       width: 100%; height: 100%; border-radius: 50%;
@@ -83,7 +81,6 @@
         transparent 60deg, transparent 360deg);
       animation: girar 4s linear infinite;
     }
-    /* Anéis fixos */
     #radar-sweep .aneis {
       position: absolute; top: 0; left: 0;
       width: 100%; height: 100%; border-radius: 50%; pointer-events: none;
@@ -170,13 +167,13 @@
     let circuloArea = null;
 
     const detalhesAviao = {};
-    const fotosAviao = {};   // ← cache das fotos por icao
+    const fotosAviao = {};
     const historico = {};
     const trilhas = {};
     const MAX_PONTOS = 15;
     let mostrarRastro = true;
 
-    const NM_PARA_METROS = 1852; // 1 milha náutica = 1852 m
+    const NM_PARA_METROS = 1852;
 
     function corPorAltitude(alt, solo) {
       if (solo) return "#9e9e9e";
@@ -277,7 +274,6 @@
       }).addTo(map);
     }
 
-    // Recentra o sweep no centro geográfico do círculo (sem transform — só posição)
     function centrarSweep() {
       const c = lerCentro();
       if (isNaN(c.lat) || isNaN(c.lon)) return;
@@ -314,11 +310,9 @@
       }
     }
 
-    // Monta o bloco extra do popup com dados da API + Hexdb + foto
     function textoExtra(a, d, foto) {
       let s = "";
 
-      // 📸 Foto no topo (se já buscada)
       if (foto && foto.thumb) {
         s += `<div style="margin-bottom:6px">
                 <a href="${foto.link}" target="_blank">
@@ -375,22 +369,24 @@
           marcador._dados = a;
 
           marcador.on('popupopen', async () => {
-            // busca detalhes (Hexdb) e foto (Planespotters) em paralelo
-            const precisaDetalhe = !detalhesAviao[a.icao];
-            const precisaFoto = !fotosAviao[a.icao];
+            const dados = marcador._dados;
+            const precisaDetalhe = !detalhesAviao[dados.icao];
+            const precisaFoto = !fotosAviao[dados.icao];
             if (!precisaDetalhe && !precisaFoto) return;
 
             try {
+              const urlFoto = '/api/foto/' + dados.icao +
+                (dados.registro ? '?reg=' + encodeURIComponent(dados.registro) : '');
               const [rd, rf] = await Promise.all([
-                precisaDetalhe ? fetch('/api/aviao/' + a.icao) : null,
-                precisaFoto ? fetch('/api/foto/' + a.icao) : null,
+                precisaDetalhe ? fetch('/api/aviao/' + dados.icao) : null,
+                precisaFoto ? fetch(urlFoto) : null,
               ]);
-              if (rd) detalhesAviao[a.icao] = await rd.json();
-              if (rf) fotosAviao[a.icao] = await rf.json();
+              if (rd) detalhesAviao[dados.icao] = await rd.json();
+              if (rf) fotosAviao[dados.icao] = await rf.json();
 
               marcador.setPopupContent(
                 marcador._popupBase +
-                textoExtra(marcador._dados, detalhesAviao[a.icao], fotosAviao[a.icao])
+                textoExtra(marcador._dados, detalhesAviao[dados.icao], fotosAviao[dados.icao])
               );
             } catch (e) {}
           });
@@ -433,7 +429,6 @@
 
     window.addEventListener('resize', () => { map.invalidateSize(); centrarSweep(); });
 
-    // Inicialização — lê lat/lon/raio da URL, se vierem
     const params = new URLSearchParams(location.search);
     if (params.has('lat')) document.getElementById('lat').value = params.get('lat');
     if (params.has('lon')) document.getElementById('lon').value = params.get('lon');
