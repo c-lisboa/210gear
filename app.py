@@ -82,7 +82,40 @@ PREFIXO_PAIS = {
     "HK": ("Colômbia", "CO"), "OB": ("Peru", "PE"), "HP": ("Panamá", "PA"),
     "XA": ("México", "MX"), "XB": ("México", "MX"), "XC": ("México", "MX"),
     "PH": ("Holanda", "NL"), "I": ("Itália", "IT"),
+    "HB": ("Suíça", "CH"), "TC": ("Turquia", "TR"), "A6": ("Emirados Árabes", "AE"),
+    "A7": ("Catar", "QA"), "ET": ("Etiópia", "ET"), "EI": ("Irlanda", "IE"),
 }
+
+# ─────────────────────────────────────────────
+# 📡 Faixas do código ICAO24 (hex) → país  (plano B sem matrícula)
+# ─────────────────────────────────────────────
+FAIXAS_ICAO24 = [
+    (0xE40000, 0xE7FFFF, "Brasil", "BR"),
+    (0xE00000, 0xE3FFFF, "Argentina", "AR"),
+    (0xE80000, 0xE80FFF, "Chile", "CL"),
+    (0xE84000, 0xE84FFF, "Peru", "PE"),
+    (0xE88000, 0xE88FFF, "Paraguai", "PY"),
+    (0xE90000, 0xE90FFF, "Uruguai", "UY"),
+    (0xE94000, 0xE94FFF, "Bolívia", "BO"),
+    (0x0AC000, 0x0ACFFF, "Colômbia", "CO"),
+    (0x0C2000, 0x0C2FFF, "Panamá", "PA"),
+    (0x0D0000, 0x0D7FFF, "México", "MX"),
+    (0xA00000, 0xAFFFFF, "Estados Unidos", "US"),
+    (0xC00000, 0xC3FFFF, "Canadá", "CA"),
+    (0x400000, 0x43FFFF, "Reino Unido", "GB"),
+    (0x3C0000, 0x3FFFFF, "Alemanha", "DE"),
+    (0x380000, 0x3BFFFF, "França", "FR"),
+    (0x340000, 0x37FFFF, "Espanha", "ES"),
+    (0x300000, 0x33FFFF, "Itália", "IT"),
+    (0x490000, 0x497FFF, "Portugal", "PT"),
+    (0x480000, 0x487FFF, "Holanda", "NL"),
+    (0x4B0000, 0x4B7FFF, "Suíça", "CH"),
+    (0x4B8000, 0x4BFFFF, "Turquia", "TR"),
+    (0x4CA000, 0x4CAFFF, "Irlanda", "IE"),
+    (0x896000, 0x896FFF, "Emirados Árabes", "AE"),
+    (0x06A000, 0x06A3FF, "Catar", "QA"),
+    (0x040000, 0x040FFF, "Etiópia", "ET"),
+]
 
 # ─────────────────────────────────────────────
 # 🏢 Prefixo do callsign → companhia aérea
@@ -106,16 +139,28 @@ def bandeira_de_iso(iso):
     return chr(ord(iso[0].upper()) + 127397) + chr(ord(iso[1].upper()) + 127397)
 
 
-def pais_por_registro(reg):
-    if not reg:
-        return ("Desconhecido", "🏳️")
-    r = reg.upper().replace("-", "")
-    for tam in (2, 1):
-        pref = r[:tam]
-        if pref in PREFIXO_PAIS:
-            nome, iso = PREFIXO_PAIS[pref]
+def pais_por_icao24(icao):
+    try:
+        n = int(icao, 16)
+    except (TypeError, ValueError):
+        return None
+    for ini, fim, nome, iso in FAIXAS_ICAO24:
+        if ini <= n <= fim:
             return (nome, bandeira_de_iso(iso))
-    return ("Desconhecido", "🏳️")
+    return None
+
+
+def pais_por_registro(reg, icao=""):
+    # 1) tenta pela matrícula
+    if reg:
+        r = reg.upper().replace("-", "")
+        for tam in (2, 1):
+            pref = r[:tam]
+            if pref in PREFIXO_PAIS:
+                nome, iso = PREFIXO_PAIS[pref]
+                return (nome, bandeira_de_iso(iso))
+    # 2) plano B: pelo código ICAO24
+    return pais_por_icao24(icao) or ("Desconhecido", "🏳️")
 
 
 def companhia_por_callsign(cs):
@@ -132,7 +177,8 @@ def companhia_por_callsign(cs):
 # ─────────────────────────────────────────────
 def montar_aviao(a):
     registro = a.get("r", "") or ""
-    pais, bandeira = pais_por_registro(registro)
+    icao = a.get("hex", "") or ""
+    pais, bandeira = pais_por_registro(registro, icao)
 
     alt_baro = a.get("alt_baro")
     no_solo = alt_baro == "ground"
@@ -142,7 +188,7 @@ def montar_aviao(a):
     emergencia = squawk in ("7500", "7600", "7700")
 
     return {
-        "icao": a.get("hex", ""),
+        "icao": icao,
         "callsign": (a.get("flight") or "").strip() or "N/D",
         "pais": pais,
         "bandeira": bandeira,
