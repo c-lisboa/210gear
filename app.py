@@ -304,6 +304,68 @@ def api_voo(callsign):
 
 
 # ─────────────────────────────────────────────
+# 🛫 Rota do voo (origem → destino) — OpenSky /flights/aircraft
+#    Usa o mesmo login (token) do services/opensky.py
+# ─────────────────────────────────────────────
+ROTA_VALIDADE = 600   # 10 minutos
+_cache_rota = {}
+
+
+def _info_aeroporto(cod):
+    if not cod:
+        return None
+    nome = cod
+    try:
+        d = airports.detalhes(cod)
+        if d and d.get("aero"):
+            nome = d["aero"].get("name") or cod
+    except Exception:
+        pass
+    return {"codigo": cod, "nome": nome}
+
+
+@app.route("/api/rota/<icao>")
+def api_rota(icao):
+    icao = icao.strip().lower()
+    vazio = {"origem": None, "destino": None}
+    if not icao:
+        return jsonify(vazio)
+
+    agora = time.time()
+    c = _cache_rota.get(icao)
+    if c and agora - c["hora"] < ROTA_VALIDADE:
+        return jsonify(c["dados"])
+
+    headers = {}
+    try:
+        tk = opensky._obter_token()
+        if isinstance(tk, str) and tk:
+            headers["Authorization"] = f"Bearer {tk}"
+    except Exception as e:
+        print("[ROTA] erro token:", e)
+
+    fim = int(agora)
+    ini = fim - 2 * 86400 + 60   # até 2 dias atrás (limite da API)
+    dados = vazio
+    try:
+        r = requests.get("https://opensky-network.org/api/flights/aircraft",
+                         params={"icao24": icao, "begin": ini, "end": fim},
+                         headers=headers, timeout=15)
+        print(f"[ROTA] {icao} -> {r.status_code}")
+        if r.ok and r.text.strip():
+            voos = sorted(r.json() or [], key=lambda v: v.get("lastSeen") or 0)
+            if voos:
+                u = voos[-1]
+                dados = {"origem": _info_aeroporto(u.get("estDepartureAirport")),
+                         "destino": _info_aeroporto(u.get("estArrivalAirport"))}
+    except Exception as e:
+        print("[ROTA] erro:", e)
+
+    _cache_rota[icao] = {"dados": dados, "hora": agora}
+    return jsonify(dados)
+
+
+# ─────────────────────────────────────────────
 # 🔍 Detalhes da aeronave (Hexdb.io — grátis, sem chave)
 # ─────────────────────────────────────────────
 _cache_aviao = {}
