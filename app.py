@@ -1,7 +1,10 @@
 import os
 import time
-import requests
+import json
+import threading
+from collections import Counter
 
+import requests
 from flask import Flask, render_template, request, jsonify
 from services import airports, metar, opensky, agregador
 
@@ -59,9 +62,10 @@ def api_avioes():
 
 
 # ─────────────────────────────────────────────
-# 🌎 Centro padrão (Rio de Janeiro)
+# 🌎 Centros
 # ─────────────────────────────────────────────
-CENTRO_PADRAO = {"lat": -22.82, "lon": -43.32, "raio": 8}  # raio em milhas náuticas
+CENTRO_PADRAO = {"lat": -22.82, "lon": -43.32, "raio": 8}   # mapa (milhas náuticas)
+CENTRO_ESTAT = {"lat": -22.8, "lon": -43.4, "raio": 80}     # estatísticas da home
 
 # ─────────────────────────────────────────────
 # 🏳️ Prefixos de matrícula → país
@@ -78,6 +82,21 @@ PREFIXO_PAIS = {
     "HK": ("Colômbia", "CO"), "OB": ("Peru", "PE"), "HP": ("Panamá", "PA"),
     "XA": ("México", "MX"), "XB": ("México", "MX"), "XC": ("México", "MX"),
     "PH": ("Holanda", "NL"), "I": ("Itália", "IT"),
+}
+
+# ─────────────────────────────────────────────
+# 🏢 Prefixo do callsign → companhia aérea
+# ─────────────────────────────────────────────
+COMPANHIAS = {
+    "TAM": "LATAM Brasil", "LAN": "LATAM", "GLO": "GOL", "AZU": "Azul",
+    "PTB": "Passaredo", "ACN": "Azul Conecta", "TTL": "Total Linhas Aéreas",
+    "ARG": "Aerolíneas Argentinas", "AAL": "American Airlines",
+    "UAL": "United", "DAL": "Delta", "TAP": "TAP Portugal",
+    "AFR": "Air France", "KLM": "KLM", "BAW": "British Airways",
+    "DLH": "Lufthansa", "IBE": "Iberia", "UAE": "Emirates",
+    "QTR": "Qatar Airways", "CMP": "Copa Airlines", "AVA": "Avianca",
+    "ITY": "ITA Airways", "SWR": "Swiss", "THY": "Turkish Airlines",
+    "ETH": "Ethiopian", "FAB": "Força Aérea Brasileira", "LTG": "LATAM Cargo",
 }
 
 
@@ -99,13 +118,19 @@ def pais_por_registro(reg):
     return ("Desconhecido", "🏳️")
 
 
+def companhia_por_callsign(cs):
+    if not cs or cs == "N/D" or len(cs) < 4:
+        return None
+    pref = cs[:3].upper()
+    if not pref.isalpha():
+        return None
+    return COMPANHIAS.get(pref, pref)
+
+
 # ─────────────────────────────────────────────
 # 🔧 Converte 1 aeronave crua (formato v2) → formato do site
 # ─────────────────────────────────────────────
 def montar_aviao(a):
-    lat_a = a.get("lat")
-    lon_a = a.get("lon")
-
     registro = a.get("r", "") or ""
     pais, bandeira = pais_por_registro(registro)
 
@@ -121,8 +146,8 @@ def montar_aviao(a):
         "callsign": (a.get("flight") or "").strip() or "N/D",
         "pais": pais,
         "bandeira": bandeira,
-        "lon": lon_a,
-        "lat": lat_a,
+        "lon": a.get("lon"),
+        "lat": a.get("lat"),
         "alt": alt,
         "solo": no_solo,
         "veloc": a.get("gs") or 0,
@@ -139,10 +164,30 @@ def montar_aviao(a):
 
 
 # ─────────────────────────────────────────────
-# 🚦 Cache de tráfego
+# 🚦 Cache de tráfego (usado pelo mapa e pelas estatísticas)
 # ─────────────────────────────────────────────
 CACHE_SEGUNDOS = 8
 _cache_trafego = {}
+
+
+def obter_trafego(lat, lon, raio_nm):
+    raio_nm = max(1, min(raio_nm, 250))
+    chave = f"{round(lat, 3)},{round(lon, 3)},{round(raio_nm)}"
+    agora = time.time()
+
+    cache = _cache_trafego.get(chave)
+    if cache and (agora - cache["hora"] < CACHE_SEGUNDOS):
+        return cache["dados"]
+
+    aeronaves = agregador.buscar_trafego(lat, lon, raio_nm)
+    if not aeronaves and cache:
+        return cache["dados"]
+
+    avioes = [montar_aviao(a) for a in aeronaves
+              if a.get("lat") is not None and a.get("lon") is not None]
+
+    _cache_trafego[chave] = {"dados": avioes, "hora": agora}
+    return avioes
 
 
 @app.route("/api/trafego")
@@ -150,24 +195,49 @@ def api_trafego():
     lat = request.args.get("lat", CENTRO_PADRAO["lat"], type=float)
     lon = request.args.get("lon", CENTRO_PADRAO["lon"], type=float)
     raio_nm = request.args.get("raio", CENTRO_PADRAO["raio"], type=float)
-    raio_nm = max(1, min(raio_nm, 250))
+    return jsonify(obter_trafego(lat, lon, raio_nm))
 
-    chave = f"{round(lat, 3)},{round(lon, 3)},{round(raio_nm)}"
-    agora = time.time()
 
-    cache = _cache_trafego.get(chave)
-    if cache and (agora - cache["hora"] < CACHE_SEGUNDOS):
-        return jsonify(cache["dados"])
+# ─────────────────────────────────────────────
+# 📊 Estatísticas da página inicial
+# ─────────────────────────────────────────────
+@app.route("/api/estatisticas")
+def api_estatisticas():
+    try:
+        avioes = obter_trafego(CENTRO_ESTAT["lat"], CENTRO_ESTAT["lon"], CENTRO_ESTAT["raio"])
+    except Exception as e:
+        print("[ESTAT] erro:", e)
+        return jsonify({"erro": "Não foi possível obter o tráfego agora."})
 
-    aeronaves = agregador.buscar_trafego(lat, lon, raio_nm)
-    if not aeronaves and cache:
-        return jsonify(cache["dados"])
+    no_ar = [a for a in avioes if not a["solo"]]
+    no_solo = [a for a in avioes if a["solo"]]
 
-    avioes = [montar_aviao(a) for a in aeronaves
-              if a.get("lat") is not None and a.get("lon") is not None]
+    def resumo(a):
+        return {"callsign": a["callsign"], "bandeira": a["bandeira"],
+                "alt": round(a["alt"]), "veloc": round(a["veloc"]),
+                "tipo": a["tipo"]} if a else None
 
-    _cache_trafego[chave] = {"dados": avioes, "hora": agora}
-    return jsonify(avioes)
+    mais_alto = max(no_ar, key=lambda a: a["alt"], default=None)
+    mais_rapido = max(no_ar, key=lambda a: a["veloc"], default=None)
+
+    paises = Counter((a["bandeira"], a["pais"]) for a in avioes)
+    companhias = Counter(c for c in (companhia_por_callsign(a["callsign"]) for a in avioes) if c)
+
+    return jsonify({
+        "total": len(avioes),
+        "no_ar": len(no_ar),
+        "no_solo": len(no_solo),
+        "subindo": sum(1 for a in no_ar if a["subindo"] > 100),
+        "descendo": sum(1 for a in no_ar if a["subindo"] < -100),
+        "mais_alto": resumo(mais_alto),
+        "mais_rapido": resumo(mais_rapido),
+        "paises": [{"bandeira": b, "nome": n, "qtd": q} for (b, n), q in paises.most_common(8)],
+        "companhias": [{"nome": n, "qtd": q} for n, q in companhias.most_common(6)],
+        "emergencias": [{"callsign": a["callsign"], "squawk": a["squawk"]}
+                        for a in avioes if a["emergencia"]],
+        "raio": CENTRO_ESTAT["raio"],
+        "hora": time.strftime("%H:%M:%S"),
+    })
 
 
 # ─────────────────────────────────────────────
@@ -224,9 +294,6 @@ def info_aviao(icao):
 # 📸 Foto da aeronave (Planespotters.net — grátis, sem chave)
 #    Cache persistente em arquivo + validade
 # ─────────────────────────────────────────────
-import json
-import threading
-
 ARQ_CACHE_FOTO = os.path.join(os.path.dirname(__file__), "cache_fotos.json")
 VALIDADE_COM_FOTO = 7 * 24 * 3600   # 7 dias
 VALIDADE_SEM_FOTO = 6 * 3600        # 6 horas
@@ -245,7 +312,6 @@ def _carregar_cache_foto():
 
 def _salvar_cache_foto():
     try:
-        # se passar do limite, descarta os mais antigos
         if len(_cache_foto) > LIMITE_CACHE_FOTO:
             ordenados = sorted(_cache_foto.items(), key=lambda kv: kv[1].get("hora", 0))
             for k, _ in ordenados[:len(_cache_foto) - LIMITE_CACHE_FOTO]:
@@ -270,14 +336,12 @@ def info_foto(icao):
 
     agora = time.time()
 
-    # 1) consulta o cache
     item = _cache_foto.get(icao)
     if item:
         validade = VALIDADE_COM_FOTO if item["dados"].get("thumb") else VALIDADE_SEM_FOTO
         if agora - item["hora"] < validade:
             return jsonify(item["dados"])
 
-    # 2) não está no cache (ou venceu) → busca no Planespotters
     reg = request.args.get("reg", "").strip().upper()
     resultado = {}
     headers = {"User-Agent": "SiteAviacaoRJ/1.0 (contato@exemplo.com)"}
@@ -314,18 +378,14 @@ def info_foto(icao):
         print("[FOTO] erro:", e)
         falhou_rede = True
 
-    # 3) se a rede falhou, devolve o cache antigo (mesmo vencido) e não grava nada
     if falhou_rede and not resultado.get("thumb"):
         return jsonify(item["dados"] if item else {})
 
-    # 4) grava no cache (com foto ou "sem foto")
     with _trava_foto:
         _cache_foto[icao] = {"dados": resultado, "hora": agora}
         _salvar_cache_foto()
 
     return jsonify(resultado)
-
-
 
 
 # ─────────────────────────────────────────────
@@ -336,7 +396,6 @@ def diagnostico():
     lat, lon, raio = -22.8, -43.4, 80
     linhas = ["<h2>Diagnóstico das fontes de tráfego</h2><ul>"]
 
-    # OpenSky
     try:
         d_lat = raio / 60.0
         os_ac = opensky.buscar_estados(lat - d_lat, lon - d_lat,
@@ -346,7 +405,6 @@ def diagnostico():
     except Exception as e:
         linhas.append(f"<li><b>OpenSky</b> — ❌ {e}</li>")
 
-    # ADS-B
     for base in agregador.FONTES_ADSB:
         try:
             r = requests.get(f"{base}/v2/point/{lat}/{lon}/{raio}",
@@ -356,7 +414,6 @@ def diagnostico():
         except Exception as e:
             linhas.append(f"<li><b>{base}</b> — ❌ {e}</li>")
 
-    # Agregado
     try:
         total = len(agregador.buscar_trafego(lat, lon, raio))
         linhas.append(f"<li><b>🎯 AGREGADO (sem duplicados)</b> — <b>{total}</b> aeronaves</li>")
