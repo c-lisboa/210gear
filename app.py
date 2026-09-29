@@ -222,8 +222,44 @@ def info_aviao(icao):
 
 # ─────────────────────────────────────────────
 # 📸 Foto da aeronave (Planespotters.net — grátis, sem chave)
+#    Cache persistente em arquivo + validade
 # ─────────────────────────────────────────────
-_cache_foto = {}
+import json
+import threading
+
+ARQ_CACHE_FOTO = os.path.join(os.path.dirname(__file__), "cache_fotos.json")
+VALIDADE_COM_FOTO = 7 * 24 * 3600   # 7 dias
+VALIDADE_SEM_FOTO = 6 * 3600        # 6 horas
+LIMITE_CACHE_FOTO = 5000            # máx. de aviões guardados
+
+_trava_foto = threading.Lock()
+
+
+def _carregar_cache_foto():
+    try:
+        with open(ARQ_CACHE_FOTO, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _salvar_cache_foto():
+    try:
+        # se passar do limite, descarta os mais antigos
+        if len(_cache_foto) > LIMITE_CACHE_FOTO:
+            ordenados = sorted(_cache_foto.items(), key=lambda kv: kv[1].get("hora", 0))
+            for k, _ in ordenados[:len(_cache_foto) - LIMITE_CACHE_FOTO]:
+                _cache_foto.pop(k, None)
+        tmp = ARQ_CACHE_FOTO + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(_cache_foto, f, ensure_ascii=False)
+        os.replace(tmp, ARQ_CACHE_FOTO)
+    except Exception as e:
+        print("[FOTO] erro ao salvar cache:", e)
+
+
+_cache_foto = _carregar_cache_foto()
+print(f"[FOTO] cache carregado: {len(_cache_foto)} aeronaves")
 
 
 @app.route("/api/foto/<icao>")
@@ -232,13 +268,20 @@ def info_foto(icao):
     if not icao:
         return jsonify({})
 
-    # só usa cache se tiver foto de verdade
-    if _cache_foto.get(icao, {}).get("thumb"):
-        return jsonify(_cache_foto[icao])
+    agora = time.time()
 
+    # 1) consulta o cache
+    item = _cache_foto.get(icao)
+    if item:
+        validade = VALIDADE_COM_FOTO if item["dados"].get("thumb") else VALIDADE_SEM_FOTO
+        if agora - item["hora"] < validade:
+            return jsonify(item["dados"])
+
+    # 2) não está no cache (ou venceu) → busca no Planespotters
     reg = request.args.get("reg", "").strip().upper()
     resultado = {}
     headers = {"User-Agent": "SiteAviacaoRJ/1.0 (contato@exemplo.com)"}
+    falhou_rede = False
 
     def _extrair(js):
         fotos = (js or {}).get("photos") or []
@@ -252,26 +295,36 @@ def info_foto(icao):
         }
 
     try:
-        # 1) por hex
-        url = f"https://api.planespotters.net/pub/photos/hex/{icao}"
-        r = requests.get(url, headers=headers, timeout=10)
+        r = requests.get(f"https://api.planespotters.net/pub/photos/hex/{icao}",
+                         headers=headers, timeout=10)
         print(f"[FOTO] hex {icao} -> {r.status_code}")
         if r.ok:
             resultado = _extrair(r.json())
+        else:
+            falhou_rede = True
 
-        # 2) fallback por registro (matrícula), se veio e não achou por hex
         if not resultado.get("thumb") and reg:
-            url = f"https://api.planespotters.net/pub/photos/reg/{reg}"
-            r = requests.get(url, headers=headers, timeout=10)
+            r = requests.get(f"https://api.planespotters.net/pub/photos/reg/{reg}",
+                             headers=headers, timeout=10)
             print(f"[FOTO] reg {reg} -> {r.status_code}")
             if r.ok:
                 resultado = _extrair(r.json())
+                falhou_rede = False
     except Exception as e:
         print("[FOTO] erro:", e)
+        falhou_rede = True
 
-    if resultado.get("thumb"):
-        _cache_foto[icao] = resultado
+    # 3) se a rede falhou, devolve o cache antigo (mesmo vencido) e não grava nada
+    if falhou_rede and not resultado.get("thumb"):
+        return jsonify(item["dados"] if item else {})
+
+    # 4) grava no cache (com foto ou "sem foto")
+    with _trava_foto:
+        _cache_foto[icao] = {"dados": resultado, "hora": agora}
+        _salvar_cache_foto()
+
     return jsonify(resultado)
+
 
 
 
