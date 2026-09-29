@@ -13,6 +13,8 @@
 <div id="resultado" style="display:none">
   <div class="badge-resumo" id="cabecalho" style="background:#1a3a5a"></div>
 
+  <div id="rota" style="margin:12px 0;padding:12px;border-radius:8px;background:#f4f6f8;color:#222"></div>
+
   <p id="aoVivo" style="margin:8px 0;font-size:13px;color:#7f8c8d"></p>
 
   <div id="fotoVoo" style="margin:12px 0"></div>
@@ -84,6 +86,39 @@ function mostrarRelogio() {
   const s = Math.round((Date.now() - ultimaAtualizacao) / 1000);
   document.getElementById('aoVivo').textContent =
     `🟢 Ao vivo — atualizado há ${s} s`;
+}
+
+// ─────────────────────────────────────────────
+// Rota origem → destino (só na primeira busca)
+// ─────────────────────────────────────────────
+function htmlAeroporto(ap) {
+  if (!ap) return '<i style="opacity:.6">não informado</i>';
+  return `<a href="/aeroporto/${ap.codigo}"><b>${ap.codigo}</b></a>
+          <div style="font-size:12px;opacity:.8">${ap.nome}</div>`;
+}
+
+async function carregarRota(icao, meuId) {
+  const box = document.getElementById('rota');
+  box.innerHTML = "🛫 Buscando rota...";
+  if (!icao) { box.innerHTML = "🛫 Rota não disponível."; return; }
+  try {
+    const r = await fetch('/api/rota/' + icao);
+    const d = await r.json();
+    if (meuId !== buscaId) return;
+    if (!d.origem && !d.destino) {
+      box.innerHTML = "🛫 Rota ainda não disponível na OpenSky para este avião.";
+      return;
+    }
+    box.innerHTML = `
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <div>🛫 <small>Origem</small><br>${htmlAeroporto(d.origem)}</div>
+        <div style="font-size:22px">➜</div>
+        <div>🛬 <small>Destino</small><br>${htmlAeroporto(d.destino)}</div>
+      </div>
+      <small style="opacity:.6">Rota estimada pela OpenSky (último voo conhecido)</small>`;
+  } catch (e) {
+    box.innerHTML = "🛫 Não foi possível carregar a rota.";
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -185,6 +220,7 @@ async function buscarVoo(ev) {
   status.textContent = "🔎 Buscando...";
   resultado.style.display = "none";
   document.getElementById('fotoVoo').innerHTML = "";
+  document.getElementById('rota').innerHTML = "";
   document.getElementById('aoVivo').textContent = "";
 
   try {
@@ -196,6 +232,7 @@ async function buscarVoo(ev) {
 
     status.textContent = "";
     resultado.style.display = "block";
+    carregarRota(a.icao, meuId);
     carregarFoto(a.icao, a.registro);
     mostrarDados(a, true);
 
