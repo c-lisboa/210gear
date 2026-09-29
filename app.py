@@ -61,7 +61,7 @@ def api_avioes():
 # ─────────────────────────────────────────────
 # 🌎 Centro padrão (Rio de Janeiro)
 # ─────────────────────────────────────────────
-CENTRO_PADRAO = {"lat": -22.8, "lon": -43.4, "raio": 80}  # raio em milhas náuticas
+CENTRO_PADRAO = {"lat": -22.82, "lon": -43.32, "raio": 8}  # raio em milhas náuticas
 
 # ─────────────────────────────────────────────
 # 🏳️ Prefixos de matrícula → país
