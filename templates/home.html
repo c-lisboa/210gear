@@ -1,5 +1,40 @@
 {% extends "base.html" %}
+{% block titulo %}Início — Portal de Aviação{% endblock %}
 {% block conteudo %}
+<style>
+  .painel { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin:16px 0; }
+  .card { background:#1a3a5a; color:#fff; border-radius:10px; padding:14px; }
+  .card .rotulo { font-size:13px; opacity:.8; }
+  .card .numero { font-size:30px; font-weight:bold; margin-top:4px; }
+  .card .extra { font-size:13px; margin-top:4px; opacity:.9; }
+  .listas { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; margin-bottom:24px; }
+  .lista { background:#f4f6f8; border-radius:10px; padding:14px; color:#222; }
+  .lista h3 { margin:0 0 8px; font-size:16px; }
+  .linha { display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid #e0e4e8; }
+  .alerta { background:#c0392b; color:#fff; border-radius:10px; padding:12px; margin:12px 0; font-weight:bold; }
+  #atualizado { font-size:13px; color:#7f8c8d; }
+</style>
+
+<h1>📊 Céu do Rio agora</h1>
+<p id="atualizado">🔄 Carregando...</p>
+
+<div id="alertas"></div>
+
+<div class="painel">
+  <div class="card"><div class="rotulo">✈️ No ar</div><div class="numero" id="noAr">–</div>
+    <div class="extra" id="subDesc"></div></div>
+  <div class="card"><div class="rotulo">🛬 No solo</div><div class="numero" id="noSolo">–</div></div>
+  <div class="card"><div class="rotulo">📈 Mais alto</div><div class="numero" id="altoNum">–</div>
+    <div class="extra" id="altoInfo"></div></div>
+  <div class="card"><div class="rotulo">⚡ Mais rápido</div><div class="numero" id="rapidoNum">–</div>
+    <div class="extra" id="rapidoInfo"></div></div>
+</div>
+
+<div class="listas">
+  <div class="lista"><h3>🏢 Companhias com mais voos</h3><div id="companhias">–</div></div>
+  <div class="lista"><h3>🏳️ Países das aeronaves</h3><div id="paises">–</div></div>
+</div>
+
 <h1>✈️ Aeroportos do Rio de Janeiro</h1>
 <table>
   <tr><th>ICAO</th><th>IATA</th><th>Nome</th><th>Tipo</th><th>Elevação (ft)</th></tr>
@@ -13,4 +48,48 @@
   </tr>
   {% endfor %}
 </table>
+
+<script>
+const INTERVALO_ESTAT = 30000;  // atualiza a cada 30 segundos
+
+function linhas(lista, texto) {
+  if (!lista.length) return "<i>Nenhum no momento</i>";
+  return lista.map(i => `<div class="linha"><span>${texto(i)}</span><b>${i.qtd}</b></div>`).join("");
+}
+
+async function carregarEstatisticas() {
+  if (document.hidden) return;
+  const info = document.getElementById('atualizado');
+  try {
+    const r = await fetch('/api/estatisticas');
+    const e = await r.json();
+    if (e.erro) { info.textContent = "⚠️ " + e.erro; return; }
+
+    document.getElementById('noAr').textContent = e.no_ar;
+    document.getElementById('noSolo').textContent = e.no_solo;
+    document.getElementById('subDesc').textContent = `⬆️ ${e.subindo} subindo · ⬇️ ${e.descendo} descendo`;
+
+    const alto = e.mais_alto, rap = e.mais_rapido;
+    document.getElementById('altoNum').textContent = alto ? alto.alt.toLocaleString('pt-BR') + " ft" : "–";
+    document.getElementById('altoInfo').textContent = alto ? `${alto.bandeira} ${alto.callsign} ${alto.tipo}` : "";
+    document.getElementById('rapidoNum').textContent = rap ? rap.veloc + " nós" : "–";
+    document.getElementById('rapidoInfo').textContent = rap ? `${rap.bandeira} ${rap.callsign} ${rap.tipo}` : "";
+
+    document.getElementById('companhias').innerHTML = linhas(e.companhias, i => i.nome);
+    document.getElementById('paises').innerHTML = linhas(e.paises, i => `${i.bandeira} ${i.nome}`);
+
+    document.getElementById('alertas').innerHTML = e.emergencias.map(x =>
+      `<div class="alerta">🚨 EMERGÊNCIA: <a href="/voo" style="color:#fff">${x.callsign}</a> — squawk ${x.squawk}</div>`
+    ).join("");
+
+    info.textContent = `🟢 ${e.total} aeronaves num raio de ${e.raio} milhas — atualizado às ${e.hora}`;
+  } catch (err) {
+    info.textContent = "❌ Erro ao carregar estatísticas.";
+  }
+}
+
+carregarEstatisticas();
+setInterval(carregarEstatisticas, INTERVALO_ESTAT);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) carregarEstatisticas(); });
+</script>
 {% endblock %}
